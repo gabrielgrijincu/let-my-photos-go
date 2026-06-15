@@ -1,12 +1,9 @@
 import * as fs from 'fs';
-import * as path from 'path';
+import { CONFIG_PATH } from './paths.js';
 
 export interface Config {
-  clientId: string;
-  clientSecret: string;
+  outputDir: string;
 }
-
-export const CONFIG_PATH = path.resolve(process.cwd(), 'config.json');
 
 export function readConfig(): Config | null {
   try {

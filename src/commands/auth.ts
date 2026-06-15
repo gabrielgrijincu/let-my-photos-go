@@ -2,11 +2,14 @@ import { Command } from 'commander';
 import * as fs from 'fs';
 import * as clack from '@clack/prompts';
 import { launchHeadedBrowser, saveSession, AUTH_PATH } from '../browser.js';
+import { ensureDataDir } from '../paths.js';
 
 export const authCommand = new Command('auth')
   .description('Log in to Google Photos (saves browser session for downloads)')
   .action(async () => {
     clack.intro('🕊️  Let My Photos Go — Auth');
+
+    ensureDataDir();
 
     if (fs.existsSync(AUTH_PATH)) {
       clack.log.warn('An existing session was found in auth.json. Re-authenticating will overwrite it.');

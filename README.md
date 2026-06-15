@@ -17,32 +17,16 @@ You want your photos back. The real ones. With full EXIF data, GPS coordinates, 
 
 `let-my-photos-go` bypasses all of this by automating the **Google Photos web interface** directly — just like you would if you sat down and downloaded each photo by hand, but at scale. Playwright drives a real Chromium browser that uses your actual Google session, so Google sees it as a normal user download and serves the original, untouched file.
 
-The Google Photos API is still used — but only for **enumeration** (listing all your photos and their metadata). The actual downloads go through the browser, preserving every byte of EXIF data.
+The Google Photos API is used for **enumeration** (listing all your photos and their metadata), but authenticated via the same browser session — no Google Cloud project or API credentials required.
 
 ---
 
 ## Prerequisites
 
-### 1. Google Cloud project with OAuth2 credentials
-
-The Photos Library API requires a Google Cloud OAuth2 client to enumerate your library. This is a one-time setup.
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/) and create a new project (or use an existing one).
-2. Enable the **Photos Library API**: APIs & Services → Library → search "Photos Library API" → Enable.
-3. Create credentials: APIs & Services → Credentials → Create Credentials → **OAuth client ID**.
-   - Application type: **Desktop app**
-   - Name: anything you like
-4. Copy the **Client ID** and **Client Secret** — you'll need them when you first run `lmpg auth`.
-
-> You may also need to add your Google account as a test user under OAuth consent screen → Test users, if the app is in "Testing" mode.
-
-### 2. Node.js and Playwright
+Node.js and a Playwright Chromium browser:
 
 ```bash
-# Install dependencies
 yarn install
-
-# Install the Playwright Chromium browser (one-time)
 npx playwright install chromium
 ```
 
@@ -77,17 +61,15 @@ yarn link  # makes `lmpg` available globally
 lmpg auth
 ```
 
-Opens a visible Chromium browser window and navigates to `https://photos.google.com`. Log in to your Google account normally. Once you're in, come back to the terminal — the session is saved to `auth.json`. This browser session is what the tool uses to trigger downloads of original files, bypassing the API's transcoding.
+Opens a visible Chromium browser window and navigates to `https://photos.google.com`. Log in to your Google account normally. Once you're in, come back to the terminal — the session is saved to `~/.let-my-photos-go/auth.json`.
 
-### Step 2: Set up API access (`lmpg config`)
+### Step 2: Set output directory (`lmpg config`)
 
 ```bash
 lmpg config
 ```
 
-On first run, prompts for your Google Cloud OAuth2 **Client ID** and **Client Secret** and saves them to `config.json`. Then opens a Playwright browser window to Google's OAuth consent screen — authorize access to your photo library. The tool catches the redirect, exchanges the authorization code for tokens, and saves them to `tokens.json`.
-
-These tokens are used to call the Photos Library API for fast enumeration of your entire library. Access tokens auto-refresh using the stored refresh token, so you rarely need to reauthenticate.
+Prompts for the directory where photos will be downloaded (default: `~/Pictures/let-my-photos-go`). That's it — no API credentials needed.
 
 ### Step 3: Download everything (`lmpg flee`)
 
@@ -95,16 +77,29 @@ These tokens are used to call the Photos Library API for fast enumeration of you
 lmpg flee
 ```
 
-Launches a headless browser with the saved session, enumerates all your photos via the API, then downloads each one by triggering the "Download original" action (Shift+D) in the Google Photos web UI. Files are saved to `./photos/` by default.
+Launches a headless browser with the saved session, enumerates all your photos, then downloads each one by triggering the "Download original" action (Shift+D) in the Google Photos web UI.
 
-Progress is checkpointed to `photos.db` (SQLite). If the run is interrupted, just run it again — already-downloaded photos are skipped automatically.
+Photos are organised into subdirectories by year and month:
+
+```
+~/Pictures/let-my-photos-go/
+  2023/
+    06/  IMG_4821.jpg
+    11/  IMG_5103.heic
+  2024/
+    01/  IMG_5209.jpg
+```
+
+Progress is checkpointed to `~/.let-my-photos-go/photos.db` (SQLite). If interrupted, just run again — already-downloaded photos are skipped.
 
 ```bash
-# Skip photos already marked as downloaded in the database
-lmpg flee --resume
-
-# Save to a custom directory
-lmpg flee --output ~/Pictures/google-photos-backup
+lmpg flee --resume          # skip re-enumeration if DB already has entries
+lmpg flee --year 2023       # only photos from 2023
+lmpg flee --from 2022-06    # photos from June 2022 onwards
+lmpg flee --media-type photo # photos only, skip videos
+lmpg flee --limit 10        # download at most 10 (useful for testing)
+lmpg flee --concurrency 5   # 5 parallel downloads (default: 3)
+lmpg flee --inspect         # headed browser with DevTools (for debugging)
 ```
 
 ### Step 4: Check progress (`lmpg status`)
@@ -119,39 +114,34 @@ Shows total photos found, how many are downloaded, pending, and failed.
 
 ## How It Works
 
-The tool separates two concerns that require different access methods:
+| Concern | Method |
+|---|---|
+| Listing your photos | Google Photos Library API, authenticated via browser session token |
+| Downloading originals | Playwright browser (Shift+D) — serves unmodified originals with full EXIF/GPS |
 
-| Concern | Method | Why |
-|---|---|---|
-| Listing your photos | Google Photos Library API (via OAuth2) | Fast, paginated, metadata-rich |
-| Downloading originals | Playwright browser session (Shift+D) | Only way to get unmodified originals with full EXIF/GPS |
-
-1. **`lmpg auth`** sets up OAuth2 tokens for the API and a Playwright browser session for downloads.
-2. **`lmpg flee`** calls the API to enumerate all media items (paginated, `mediaItems.list`), inserts them into SQLite, then opens each photo's URL in the headless browser and triggers a download.
-3. Each downloaded file is marked in `photos.db`. Re-runs skip already-completed photos.
+1. **`lmpg auth`** saves a Playwright session to `~/.let-my-photos-go/auth.json`.
+2. **`lmpg flee`** intercepts the Bearer token the Google Photos web app uses internally, then calls the `mediaItems.list` API with it to enumerate your library. Downloads go through the browser session directly.
+3. Each file is saved to `<outputDir>/YYYY/MM/filename` and marked in SQLite. Re-runs skip completed photos. Duplicate filenames in the same month get a `_2`, `_3` suffix.
 
 ---
 
-## Files Created Locally
+## Data Directory
 
-| File | Purpose | In `.gitignore`? |
-|---|---|---|
-| `config.json` | OAuth2 Client ID and Client Secret | ✅ Yes |
-| `tokens.json` | OAuth2 access + refresh tokens | ✅ Yes |
-| `auth.json` | Playwright browser session (cookies) | ✅ Yes |
-| `photos.db` | SQLite checkpoint database | ✅ Yes |
-| `photos/` | Downloaded photo files | ✅ Yes |
+All persistent state lives in `~/.let-my-photos-go/`:
 
-**None of these should ever be committed to git.** All are excluded by `.gitignore`.
+| File | Purpose |
+|---|---|
+| `auth.json` | Playwright browser session (Google cookies) |
+| `config.json` | Output directory |
+| `photos.db` | SQLite download checkpoint database |
 
-`config.json` and `tokens.json` together grant full read access to your Google Photos library. `auth.json` contains your Google session cookies. Treat all of them like passwords.
+`auth.json` contains your Google session cookies — treat it like a password. It is never in your project directory and never committed to git.
 
 ---
 
 ## Session Expiry
 
-- **`auth.json`** (browser session): expires periodically. When `lmpg flee` detects an invalid session, it will tell you to run `lmpg auth` again.
-- **`tokens.json`** (API tokens): access tokens auto-refresh silently using the stored refresh token. Refresh tokens are long-lived but can be revoked via your [Google Account security page](https://myaccount.google.com/permissions).
+`auth.json` expires periodically. When `lmpg flee` detects an invalid session, it will tell you to run `lmpg auth` again.
 
 ---
 
@@ -159,11 +149,17 @@ The tool separates two concerns that require different access methods:
 
 | Command | Description |
 |---|---|
-| `lmpg auth` | Log in to Google Photos (saves Playwright browser session) |
-| `lmpg config` | Set up OAuth2 credentials and authorize API access |
-| `lmpg flee` | Enumerate and download all photos |
-| `lmpg flee --resume` | Skip photos already marked as downloaded |
-| `lmpg flee --output <dir>` | Save to a custom directory (default: `./photos`) |
+| `lmpg auth` | Log in to Google Photos (saves browser session) |
+| `lmpg config` | Set output directory |
+| `lmpg flee [options]` | Enumerate and download all photos |
+| `lmpg flee --resume` | Skip re-enumeration; skip already-downloaded photos |
+| `lmpg flee --failed-only` | Only retry previously failed photos |
+| `lmpg flee --year <year>` | Filter by year |
+| `lmpg flee --from <date> --to <date>` | Filter by date range |
+| `lmpg flee --media-type photo\|video` | Filter by media type |
+| `lmpg flee --limit <n>` | Cap number of downloads |
+| `lmpg flee --concurrency <n>` | Parallel downloads (default: 3) |
+| `lmpg flee --inspect` | Headed browser with DevTools |
 | `lmpg status` | Show download progress |
 | `lmpg -v` | Print version |
 

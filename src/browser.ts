@@ -1,7 +1,7 @@
 import { chromium, Browser, BrowserContext } from 'playwright';
-import * as path from 'path';
+import { AUTH_PATH } from './paths.js';
 
-export const AUTH_PATH = path.resolve(process.cwd(), 'auth.json');
+export { AUTH_PATH };
 
 export async function launchHeadedBrowser(storageState?: string): Promise<{ browser: Browser; context: BrowserContext }> {
   const browser = await chromium.launch({ headless: false });
@@ -9,11 +9,11 @@ export async function launchHeadedBrowser(storageState?: string): Promise<{ brow
   return { browser, context };
 }
 
-export async function launchHeadlessBrowser(): Promise<{ browser: Browser; context: BrowserContext }> {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    storageState: AUTH_PATH,
+export async function launchHeadlessBrowser(opts: { inspect?: boolean } = {}): Promise<{ browser: Browser; context: BrowserContext }> {
+  const browser = await chromium.launch({
+    headless: !opts.inspect,
   });
+  const context = await browser.newContext({ storageState: AUTH_PATH });
   return { browser, context };
 }
 

@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import * as clack from '@clack/prompts';
 import * as fs from 'fs';
 import { getStats } from '../db.js';
-import { AUTH_PATH } from '../browser.js';
+import { AUTH_PATH } from '../paths.js';
 
 export const statusCommand = new Command('status')
   .description('Show download progress')

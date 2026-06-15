@@ -1,18 +1,27 @@
 import Database from 'better-sqlite3';
-import * as path from 'path';
+import { DB_PATH } from './paths.js';
 
 export type PhotoStatus = 'pending' | 'downloaded' | 'failed';
 
 export interface PhotoRecord {
   media_item_id: string;
   filename: string;
+  mime_type: string | null;
   status: PhotoStatus;
   downloaded_at: string | null;
   google_url: string | null;
+  creation_time: string | null;
+  dest_path: string | null;
   created_at: string;
 }
 
-const DB_PATH = path.resolve(process.cwd(), 'photos.db');
+export interface PhotoFilter {
+  failedOnly?: boolean;
+  from?: Date;
+  to?: Date;
+  mimeTypePrefix?: string; // 'image/' or 'video/'
+  limit?: number;
+}
 
 let _db: Database.Database | null = null;
 
@@ -30,56 +39,92 @@ function migrate(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS photos (
       media_item_id TEXT PRIMARY KEY,
       filename TEXT NOT NULL,
+      mime_type TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       downloaded_at TEXT,
       google_url TEXT,
+      creation_time TEXT,
+      dest_path TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+
+  const cols = (db.prepare(`PRAGMA table_info(photos)`).all() as { name: string }[]).map(r => r.name);
+  if (!cols.includes('creation_time')) db.exec(`ALTER TABLE photos ADD COLUMN creation_time TEXT`);
+  if (!cols.includes('dest_path'))     db.exec(`ALTER TABLE photos ADD COLUMN dest_path TEXT`);
+  if (!cols.includes('mime_type'))     db.exec(`ALTER TABLE photos ADD COLUMN mime_type TEXT`);
 }
 
 export function upsertPhoto(
   mediaItemId: string,
   filename: string,
-  googleUrl: string | null
+  googleUrl: string | null,
+  creationTime: string | null,
+  mimeType: string | null,
 ): void {
   const db = getDb();
   db.prepare(`
-    INSERT INTO photos (media_item_id, filename, google_url)
-    VALUES (?, ?, ?)
+    INSERT INTO photos (media_item_id, filename, google_url, creation_time, mime_type)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT (media_item_id) DO NOTHING
-  `).run(mediaItemId, filename, googleUrl);
+  `).run(mediaItemId, filename, googleUrl, creationTime, mimeType);
 }
 
-export function markDownloaded(mediaItemId: string): void {
+export function markDownloaded(mediaItemId: string, destPath: string): void {
   const db = getDb();
   db.prepare(`
-    UPDATE photos SET status = 'downloaded', downloaded_at = datetime('now')
+    UPDATE photos SET status = 'downloaded', downloaded_at = datetime('now'), dest_path = ?
     WHERE media_item_id = ?
-  `).run(mediaItemId);
+  `).run(destPath, mediaItemId);
 }
 
 export function markFailed(mediaItemId: string): void {
   const db = getDb();
-  db.prepare(`
-    UPDATE photos SET status = 'failed'
-    WHERE media_item_id = ?
-  `).run(mediaItemId);
+  db.prepare(`UPDATE photos SET status = 'failed' WHERE media_item_id = ?`).run(mediaItemId);
 }
 
-export function getPendingPhotos(): PhotoRecord[] {
+export function getDestPathOwner(destPath: string): string | null {
   const db = getDb();
-  return db.prepare(`
-    SELECT * FROM photos WHERE status != 'downloaded' ORDER BY created_at ASC
-  `).all() as PhotoRecord[];
+  const row = db.prepare(`SELECT media_item_id FROM photos WHERE dest_path = ?`).get(destPath) as { media_item_id: string } | undefined;
+  return row?.media_item_id ?? null;
+}
+
+export function hasAnyPhotos(): boolean {
+  const db = getDb();
+  const row = db.prepare(`SELECT COUNT(*) as count FROM photos`).get() as { count: number };
+  return row.count > 0;
+}
+
+export function getPendingPhotos(filter: PhotoFilter = {}): PhotoRecord[] {
+  const db = getDb();
+  const conditions: string[] = [filter.failedOnly ? `status = 'failed'` : `status != 'downloaded'`];
+  const params: unknown[] = [];
+
+  if (filter.from) {
+    conditions.push('creation_time >= ?');
+    params.push(filter.from.toISOString());
+  }
+  if (filter.to) {
+    conditions.push('creation_time < ?');
+    params.push(filter.to.toISOString());
+  }
+  if (filter.mimeTypePrefix) {
+    conditions.push('mime_type LIKE ?');
+    params.push(`${filter.mimeTypePrefix}%`);
+  }
+
+  let sql = `SELECT * FROM photos WHERE ${conditions.join(' AND ')} ORDER BY creation_time ASC`;
+  if (filter.limit) {
+    sql += ` LIMIT ?`;
+    params.push(filter.limit);
+  }
+
+  return db.prepare(sql).all(...params) as PhotoRecord[];
 }
 
 export function getStats(): { total: number; downloaded: number; failed: number; pending: number } {
   const db = getDb();
-  const rows = db.prepare(`
-    SELECT status, COUNT(*) as count FROM photos GROUP BY status
-  `).all() as { status: string; count: number }[];
-
+  const rows = db.prepare(`SELECT status, COUNT(*) as count FROM photos GROUP BY status`).all() as { status: string; count: number }[];
   const stats = { total: 0, downloaded: 0, failed: 0, pending: 0 };
   for (const row of rows) {
     stats.total += row.count;

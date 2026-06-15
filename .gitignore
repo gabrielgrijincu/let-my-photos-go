@@ -1,8 +1,5 @@
 node_modules/
 dist/
-auth.json
-tokens.json
-config.json
 photos/
 *.db
 .env
