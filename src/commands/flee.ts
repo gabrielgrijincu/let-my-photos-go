@@ -188,8 +188,11 @@ export const fleeCommand = new Command('flee')
     let failed = 0;
     const total = pending.length;
     const { downloaded: prevDownloaded, total: grandTotal } = getStats();
+    let sessionExpired = false;
 
     const worker = async (photo: PhotoRecord) => {
+      if (sessionExpired) return;
+
       // Reconcile: file already on disk at recorded path
       if (photo.dest_path && fs.existsSync(photo.dest_path)) {
         const filename = path.basename(photo.dest_path);
@@ -209,6 +212,12 @@ export const fleeCommand = new Command('flee')
           timeout: 30000,
         });
         await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+
+        if (!page.url().startsWith('https://photos.google.com/')) {
+          sessionExpired = true;
+          clack.log.error('Session expired — run `lmpg auth` to sign in again.');
+          return;
+        }
 
         await page.keyboard.press('Shift+KeyD');
 
@@ -269,6 +278,11 @@ export const fleeCommand = new Command('flee')
     }
 
     await browser.close();
+
+    if (sessionExpired) {
+      clack.outro('Session expired. Run `lmpg auth`, then `lmpg flee --resume` to continue.');
+      return;
+    }
 
     clack.outro(`Done! Downloaded ${downloaded} photos.${failed > 0 ? ` ${failed} failed (run again to retry).` : ' 🎉'}`);
   });
