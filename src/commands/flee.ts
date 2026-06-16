@@ -2,6 +2,8 @@ import { Command } from 'commander';
 import * as clack from '@clack/prompts';
 import * as fs from 'fs';
 import * as path from 'path';
+import AdmZip from 'adm-zip';
+import { utimes } from 'utimes';
 import { launchHeadlessBrowser, isSessionValid, AUTH_PATH } from '../browser.js';
 import { enumerateAllMediaItems } from '../api.js';
 import { upsertPhoto, markDownloaded, markFailed, getPendingPhotos, hasAnyPhotos, getDestPathOwner } from '../db.js';
@@ -10,16 +12,16 @@ import type { PhotoRecord, PhotoFilter } from '../db.js';
 
 // --- helpers ---
 
-function resolveDestPath(outputDir: string, photo: PhotoRecord): string {
+function resolveDestPath(outputDir: string, photo: PhotoRecord, filename: string): string {
   const date = photo.creation_time ? new Date(photo.creation_time) : null;
   const year  = date && !isNaN(date.getTime()) ? String(date.getUTCFullYear()) : 'unknown';
   const month = date && !isNaN(date.getTime()) ? String(date.getUTCMonth() + 1).padStart(2, '0') : 'unknown';
   const dir = path.join(outputDir, year, month);
   fs.mkdirSync(dir, { recursive: true });
 
-  const ext  = path.extname(photo.filename);
-  const base = path.basename(photo.filename, ext);
-  let candidate = path.join(dir, photo.filename);
+  const ext  = path.extname(filename);
+  const base = path.basename(filename, ext);
+  let candidate = path.join(dir, filename);
   let counter = 1;
 
   while (fs.existsSync(candidate)) {
@@ -33,7 +35,6 @@ function resolveDestPath(outputDir: string, photo: PhotoRecord): string {
 }
 
 function parseDateArg(value: string, endOfDay = false): Date {
-  // Accept YYYY, YYYY-MM, or YYYY-MM-DD
   const parts = value.split('-').map(Number);
   const [y, m = endOfDay ? 12 : 1, d = endOfDay ? 31 : 1] = parts;
   const date = new Date(Date.UTC(y, m - 1, d, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0));
@@ -92,13 +93,12 @@ export const fleeCommand = new Command('flee')
       process.exit(1);
     }
 
-    // Parse date filters
     let fromDate: Date | undefined;
     let toDate: Date | undefined;
     try {
       if (options.year) {
         fromDate = parseDateArg(options.year);
-        toDate   = new Date(Date.UTC(Number(options.year) + 1, 0, 1)); // start of next year
+        toDate   = new Date(Date.UTC(Number(options.year) + 1, 0, 1));
       }
       if (options.from) fromDate = parseDateArg(options.from);
       if (options.to)   toDate   = parseDateArg(options.to, true);
@@ -121,29 +121,32 @@ export const fleeCommand = new Command('flee')
     const { browser, context } = await launchHeadlessBrowser({ inspect: options.inspect });
     spinner.stop('Browser ready.');
 
-    spinner.start('Checking session validity…');
+    spinner.start('Checking session…');
     const valid = await isSessionValid(context);
     if (!valid) {
-      spinner.stop('Session expired or invalid.');
-      clack.log.error('Your session has expired. Run `lmpg auth` to log in again.');
+      spinner.stop('Session invalid.');
+      clack.log.error('No valid session found. Run `lmpg auth` to log in.');
       await browser.close();
       process.exit(1);
     }
     spinner.stop('Session is valid.');
 
-    // Enumeration
     const skipEnum = options.resume && hasAnyPhotos();
     if (skipEnum) {
       clack.log.info('Resuming — skipping enumeration (DB already has entries).');
     } else {
-      spinner.start('Enumerating your photos from Google Photos API…');
+      spinner.start('Enumerating your photos…');
       let enumCount = 0;
       try {
         for await (const item of enumerateAllMediaItems(context, (n) => {
           spinner.message(`Enumerating photos… (${n} found so far)`);
           enumCount = n;
         })) {
-          upsertPhoto(item.id, item.filename, item.productUrl, item.mediaMetadata.creationTime ?? null, item.mimeType);
+          const creationTime = item.creationTime
+            ? new Date(item.creationTime).toISOString()
+            : null;
+          upsertPhoto(item.id, item.productUrl, creationTime);
+          if (options.limit && enumCount >= options.limit) break;
         }
       } catch (err) {
         spinner.stop('Failed to enumerate photos.');
@@ -154,7 +157,13 @@ export const fleeCommand = new Command('flee')
       spinner.stop(`Found ${enumCount} photos total.`);
     }
 
-    const filter: PhotoFilter = { failedOnly: options.failedOnly, from: fromDate, to: toDate, mimeTypePrefix, limit: options.limit };
+    const filter: PhotoFilter = {
+      failedOnly: options.failedOnly,
+      from: fromDate,
+      to: toDate,
+      mimeTypePrefix,
+      limit: options.limit,
+    };
     const pending = getPendingPhotos(filter);
 
     if (pending.length === 0) {
@@ -180,34 +189,67 @@ export const fleeCommand = new Command('flee')
     await runWithConcurrency(pending, concurrency, async (photo) => {
       // Reconcile: file already on disk at recorded path
       if (photo.dest_path && fs.existsSync(photo.dest_path)) {
-        markDownloaded(photo.media_item_id, photo.dest_path);
+        const filename = path.basename(photo.dest_path);
+        markDownloaded(photo.media_item_id, photo.dest_path, filename);
         downloaded++;
-        clack.log.step(`[${downloaded + failed}/${total}] ✓ ${photo.filename} (already on disk)`);
+        clack.log.step(`[${downloaded + failed}/${total}] ✓ ${filename} (already on disk)`);
         return;
       }
 
       const page = await context.newPage();
       try {
         const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
+        downloadPromise.catch(() => {}); // prevent unhandled rejection if page closes before download fires
 
         await page.goto(photo.google_url ?? `https://photos.google.com/photo/${photo.media_item_id}`, {
-          waitUntil: 'networkidle',
+          waitUntil: 'load',
           timeout: 30000,
         });
 
         await page.keyboard.press('Shift+KeyD');
 
         const download = await downloadPromise;
-        const destPath = resolveDestPath(outputDir, photo);
+        const filename = download.suggestedFilename() || `${photo.media_item_id}.jpg`;
+        const destPath = resolveDestPath(outputDir, photo, filename);
         await download.saveAs(destPath);
 
-        markDownloaded(photo.media_item_id, destPath);
+        const tsMs = photo.creation_time ? new Date(photo.creation_time).getTime() : Date.now();
+        const applyTimestamps = (p: string) => utimes(p, { btime: tsMs, mtime: tsMs, atime: tsMs });
+
+        let actualDestPath = destPath;
+        let actualFilename = filename;
+
+        if (filename.toLowerCase().endsWith('.zip')) {
+          const zip = new AdmZip(destPath);
+          const stillEntry = zip.getEntries().find(e => /\.(heic|jpg|jpeg|png)$/i.test(e.entryName));
+
+          if (stillEntry) {
+            const resolvedStillPath = resolveDestPath(outputDir, photo, stillEntry.entryName);
+            const resolvedBase = resolvedStillPath.replace(/\.[^.]+$/, '');
+
+            for (const entry of zip.getEntries()) {
+              const ext = path.extname(entry.entryName);
+              const outPath = resolvedBase + ext;
+              fs.writeFileSync(outPath, entry.getData());
+              await applyTimestamps(outPath);
+            }
+
+            actualFilename = path.basename(resolvedStillPath);
+            actualDestPath = resolvedStillPath;
+          }
+
+          fs.unlinkSync(destPath);
+        } else {
+          await applyTimestamps(destPath);
+        }
+
+        markDownloaded(photo.media_item_id, actualDestPath, actualFilename);
         downloaded++;
-        clack.log.step(`[${downloaded + failed}/${total}] ✓ ${photo.filename}`);
+        clack.log.step(`[${downloaded + failed}/${total}] ✓ ${actualFilename}`);
       } catch (err) {
         markFailed(photo.media_item_id);
         failed++;
-        clack.log.warn(`[${downloaded + failed}/${total}] ✗ ${photo.filename}: ${err instanceof Error ? err.message : String(err)}`);
+        clack.log.warn(`[${downloaded + failed}/${total}] ✗ ${photo.media_item_id}: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
         await page.close();
       }

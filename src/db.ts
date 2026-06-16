@@ -19,7 +19,7 @@ export interface PhotoFilter {
   failedOnly?: boolean;
   from?: Date;
   to?: Date;
-  mimeTypePrefix?: string; // 'image/' or 'video/'
+  mimeTypePrefix?: string;
   limit?: number;
 }
 
@@ -38,7 +38,7 @@ function migrate(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS photos (
       media_item_id TEXT PRIMARY KEY,
-      filename TEXT NOT NULL,
+      filename TEXT NOT NULL DEFAULT '',
       mime_type TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       downloaded_at TEXT,
@@ -57,25 +57,24 @@ function migrate(db: Database.Database): void {
 
 export function upsertPhoto(
   mediaItemId: string,
-  filename: string,
   googleUrl: string | null,
   creationTime: string | null,
-  mimeType: string | null,
 ): void {
   const db = getDb();
   db.prepare(`
-    INSERT INTO photos (media_item_id, filename, google_url, creation_time, mime_type)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO photos (media_item_id, google_url, creation_time)
+    VALUES (?, ?, ?)
     ON CONFLICT (media_item_id) DO NOTHING
-  `).run(mediaItemId, filename, googleUrl, creationTime, mimeType);
+  `).run(mediaItemId, googleUrl, creationTime);
 }
 
-export function markDownloaded(mediaItemId: string, destPath: string): void {
+export function markDownloaded(mediaItemId: string, destPath: string, filename: string): void {
   const db = getDb();
   db.prepare(`
-    UPDATE photos SET status = 'downloaded', downloaded_at = datetime('now'), dest_path = ?
+    UPDATE photos
+    SET status = 'downloaded', downloaded_at = datetime('now'), dest_path = ?, filename = ?
     WHERE media_item_id = ?
-  `).run(destPath, mediaItemId);
+  `).run(destPath, filename, mediaItemId);
 }
 
 export function markFailed(mediaItemId: string): void {

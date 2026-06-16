@@ -1,86 +1,158 @@
-import type { BrowserContext } from 'playwright';
+import type { BrowserContext, Request } from 'playwright';
 
 export interface MediaItem {
   id: string;
-  filename: string;
   productUrl: string;
-  baseUrl: string;
-  mimeType: string;
-  mediaMetadata: {
-    creationTime: string;
-    width: string;
-    height: string;
-    photo?: Record<string, unknown>;
-    video?: Record<string, unknown>;
-  };
+  creationTime: number | null; // Unix ms timestamp
 }
 
-interface MediaItemsResponse {
-  mediaItems?: MediaItem[];
-  nextPageToken?: string;
+interface BatchParams {
+  sid: string;
+  bl: string;
+  at: string;
+  hl: string;
 }
 
-export async function extractSessionToken(context: BrowserContext): Promise<string> {
-  return new Promise(async (resolve, reject) => {
-    const page = await context.newPage();
+async function extractBatchParams(context: BrowserContext): Promise<BatchParams> {
+  return new Promise((resolve, reject) => {
+    let resolved = false;
 
     const timer = setTimeout(() => {
-      page.close().catch(() => {});
-      reject(new Error(
-        'Timed out waiting for a session token from the browser.\n' +
-        'Make sure you are logged in — run `lmpg auth` if needed.'
-      ));
+      if (!resolved) {
+        resolved = true;
+        context.off('request', onRequest);
+        reject(new Error('Timed out waiting for a Google Photos session. Run `lmpg auth` to log in.'));
+      }
     }, 30_000);
 
-    page.on('request', request => {
-      const auth = request.headers()['authorization'];
-      if (auth?.startsWith('Bearer ') && request.url().includes('googleapis.com')) {
-        clearTimeout(timer);
-        page.close().catch(() => {});
-        resolve(auth.slice(7));
-      }
-    });
+    const onRequest = (request: Request) => {
+      if (resolved) return;
+      const url = request.url();
+      if (!url.includes('/_/PhotosUi/data/batchexecute')) return;
 
-    await page.goto('https://photos.google.com', { waitUntil: 'domcontentloaded' }).catch(reject);
+      const params = new URL(url).searchParams;
+      const sid = params.get('f.sid');
+      const bl = params.get('bl');
+      const hl = params.get('hl') ?? 'en';
+
+      const body = request.postData() ?? '';
+      const atMatch = body.match(/(?:^|&)at=([^&]+)/);
+
+      if (sid && bl && atMatch) {
+        resolved = true;
+        clearTimeout(timer);
+        context.off('request', onRequest);
+        resolve({ sid, bl, at: decodeURIComponent(atMatch[1]), hl });
+      }
+    };
+
+    context.on('request', onRequest);
+
+    context.newPage().then(page => {
+      page.goto('https://photos.google.com', { waitUntil: 'networkidle', timeout: 28_000 })
+        .catch(() => {})
+        .finally(() => page.close().catch(() => {}));
+    }).catch(reject);
   });
+}
+
+function parseBatchResponse(text: string): {
+  items: unknown[][];
+  continuationToken: string | null;
+  lastTimestamp: string | null;
+} {
+  // Strip )]}'\n\n anti-hijacking prefix
+  const prefixEnd = text.indexOf('\n\n');
+  const body = prefixEnd >= 0 ? text.slice(prefixEnd + 2) : text;
+
+  // Response is SIZE\nJSON\nSIZE\nJSON\n... — split on \nNUM\n boundaries
+  const firstChunk = body.split(/\n\d+\n/)[0].replace(/^\d+\n/, '');
+
+  const outer = JSON.parse(firstChunk) as Array<unknown[]>;
+  const lcxiM = outer.find(
+    (e): e is [string, string, string] =>
+      Array.isArray(e) && e[0] === 'wrb.fr' && e[1] === 'lcxiM'
+  );
+  if (!lcxiM) throw new Error('Expected lcxiM RPC entry not found in batchexecute response');
+
+  const inner = JSON.parse(lcxiM[2]);
+  if (!Array.isArray(inner)) {
+    throw new Error(`Unexpected batchexecute inner response (type=${typeof inner}): ${JSON.stringify(inner)?.slice(0, 300)}`);
+  }
+  return {
+    items: (Array.isArray(inner[0]) ? inner[0] : []) as unknown[][],
+    continuationToken: (inner[1] as string | null) ?? null,
+    lastTimestamp: (inner[2] as string | null) ?? null,
+  };
 }
 
 export async function* enumerateAllMediaItems(
   context: BrowserContext,
   onProgress?: (count: number) => void
 ): AsyncGenerator<MediaItem> {
-  let token = await extractSessionToken(context);
-  let pageToken: string | undefined;
+  const params = await extractBatchParams(context);
+
+  let lastTimestamp: string | null = null;
+  let hasMore = true;
   let totalFetched = 0;
 
-  do {
-    const params = new URLSearchParams({ pageSize: '100' });
-    if (pageToken) params.set('pageToken', pageToken);
+  while (hasMore) {
+    // Position [2] must always be null — the HAR confirms the continuation token
+    // from the response is informational only and never echoed back in requests.
+    // Position [1] is the timestamp cursor: Date.now() for first page,
+    // then last photo's timestamp + 1 for subsequent pages.
+    const ts = lastTimestamp !== null ? Number(lastTimestamp) + 1 : Date.now();
+    const innerJson = JSON.stringify([null, ts, null, null, 1, 1, null]);
 
-    const response = await fetch(
-      `https://photoslibrary.googleapis.com/v1/mediaItems?${params}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    const freqBody = JSON.stringify([[['lcxiM', innerJson, null, 'generic']]]);
 
-    // Re-extract token and retry once on 401 (session token expired mid-enumeration)
-    if (response.status === 401) {
-      token = await extractSessionToken(context);
-      continue;
+    const url = new URL('https://photos.google.com/_/PhotosUi/data/batchexecute');
+    url.searchParams.set('rpcids', 'lcxiM');
+    url.searchParams.set('source-path', '/');
+    url.searchParams.set('f.sid', params.sid);
+    url.searchParams.set('bl', params.bl);
+    url.searchParams.set('hl', params.hl);
+    url.searchParams.set('soc-app', '165');
+    url.searchParams.set('soc-platform', '1');
+    url.searchParams.set('soc-device', '1');
+    url.searchParams.set('rt', 'c');
+
+    const response = await context.request.post(url.toString(), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+        'X-Same-Domain': '1',
+        'Origin': 'https://photos.google.com',
+        'Referer': 'https://photos.google.com/',
+      },
+      form: {
+        'f.req': freqBody,
+        'at': params.at,
+      },
+    });
+
+    if (!response.ok()) {
+      throw new Error(`batchexecute failed (${response.status()}): ${await response.text()}`);
     }
 
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Google Photos API error ${response.status}: ${body}`);
-    }
+    const { items, continuationToken: nextToken, lastTimestamp: nextTs } =
+      parseBatchResponse(await response.text());
 
-    const data: MediaItemsResponse = await response.json();
+    for (const item of items) {
+      const arr = item as unknown[];
+      const id = arr[0] as string;
+      const creationTime = arr[2] as number | null;
 
-    for (const item of data.mediaItems ?? []) {
       totalFetched++;
       onProgress?.(totalFetched);
-      yield item;
+
+      yield {
+        id,
+        productUrl: `https://photos.google.com/photo/${id}`,
+        creationTime: creationTime ?? null,
+      };
     }
 
-    pageToken = data.nextPageToken;
-  } while (pageToken);
+    lastTimestamp = nextTs;
+    hasMore = items.length > 0 && nextToken !== null;
+  }
 }

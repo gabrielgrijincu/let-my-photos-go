@@ -12,6 +12,7 @@ export async function launchHeadedBrowser(storageState?: string): Promise<{ brow
 export async function launchHeadlessBrowser(opts: { inspect?: boolean } = {}): Promise<{ browser: Browser; context: BrowserContext }> {
   const browser = await chromium.launch({
     headless: !opts.inspect,
+    // args: opts.inspect ? ['--auto-open-devtools-for-tabs'] : [],
   });
   const context = await browser.newContext({ storageState: AUTH_PATH });
   return { browser, context };
@@ -22,14 +23,7 @@ export async function saveSession(context: BrowserContext): Promise<void> {
 }
 
 export async function isSessionValid(context: BrowserContext): Promise<boolean> {
-  const page = await context.newPage();
-  try {
-    await page.goto('https://photos.google.com', { waitUntil: 'networkidle', timeout: 15000 });
-    const url = page.url();
-    return url.startsWith('https://photos.google.com') && !url.includes('accounts.google.com');
-  } catch {
-    return false;
-  } finally {
-    await page.close();
-  }
+  // Cookie check — no navigation, no flaky URL assertions
+  const cookies = await context.cookies(['https://google.com', 'https://photos.google.com']);
+  return cookies.some(c => ['SID', 'SSID', '__Secure-3PSID', 'SAPISID'].includes(c.name));
 }
