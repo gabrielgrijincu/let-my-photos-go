@@ -116,9 +116,11 @@ export const fleeCommand = new Command('flee')
     const outputDir = config.outputDir;
     fs.mkdirSync(outputDir, { recursive: true });
 
+    const BROWSER_RESTART_EVERY = 500;
+
     const spinner = clack.spinner();
     spinner.start(options.inspect ? 'Launching browser in inspect mode…' : 'Launching headless browser…');
-    const { browser, context } = await launchHeadlessBrowser({ inspect: options.inspect });
+    let { browser, context } = await launchHeadlessBrowser({ inspect: options.inspect });
     spinner.stop('Browser ready.');
 
     spinner.start('Checking session…');
@@ -186,7 +188,7 @@ export const fleeCommand = new Command('flee')
     let failed = 0;
     const total = pending.length;
 
-    await runWithConcurrency(pending, concurrency, async (photo) => {
+    const worker = async (photo: PhotoRecord) => {
       // Reconcile: file already on disk at recorded path
       if (photo.dest_path && fs.existsSync(photo.dest_path)) {
         const filename = path.basename(photo.dest_path);
@@ -253,7 +255,16 @@ export const fleeCommand = new Command('flee')
       } finally {
         await page.close();
       }
-    });
+    };
+
+    for (let chunkStart = 0; chunkStart < pending.length; chunkStart += BROWSER_RESTART_EVERY) {
+      if (chunkStart > 0) {
+        await browser.close();
+        clack.log.info(`[${downloaded + failed}/${total}] Restarting browser to free memory…`);
+        ({ browser, context } = await launchHeadlessBrowser({ inspect: options.inspect }));
+      }
+      await runWithConcurrency(pending.slice(chunkStart, chunkStart + BROWSER_RESTART_EVERY), concurrency, worker);
+    }
 
     await browser.close();
 
