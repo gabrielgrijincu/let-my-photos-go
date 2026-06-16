@@ -1,7 +1,7 @@
 # Let My Photos Go 🕊️
 
-> *"Let my people go."* — Moses, ca. 1446 BC  
-> *"Let my photos go."* — You, after discovering Google Takeout strips your GPS data.
+> _"Let my people go."_ — Moses, ca. 1446 BC  
+> _"Let my photos go."_ — You, after discovering Google Takeout strips your GPS data.
 
 ---
 
@@ -19,6 +19,9 @@ You want your photos back. The real ones. With full EXIF data, GPS coordinates, 
 
 The Google Photos API is used for **enumeration** (listing all your photos and their metadata), but authenticated via the same browser session — no Google Cloud project or API credentials required.
 
+> [!WARNING]
+> This tool relies on **undocumented Google Photos internals** — keyboard shortcuts, internal API token interception, and URL structure. Google can change any of these at any time without notice, which may silently break downloads.
+
 ---
 
 ## Prerequisites
@@ -33,14 +36,6 @@ npx playwright install chromium
 ---
 
 ## Installation
-
-```bash
-# From npm (once published)
-npm install -g let-my-photos-go
-npx playwright install chromium
-```
-
-Or run directly from source:
 
 ```bash
 git clone https://github.com/gabrielgrijincu/let-my-photos-go
@@ -107,6 +102,8 @@ lmpg flee --concurrency 5   # 5 parallel downloads (default: 3)
 lmpg flee --inspect         # headed browser with DevTools (for debugging)
 ```
 
+> **Concurrency note:** The default of 3 is conservative on purpose. Values above 5–6 risk triggering Google's rate limiting or anti-automation detection, especially during multi-hour runs.
+
 ### Step 4: Check progress (`lmpg status`)
 
 ```bash
@@ -119,9 +116,9 @@ Shows total photos found, how many are downloaded, pending, and failed.
 
 ## How It Works
 
-| Concern | Method |
-|---|---|
-| Listing your photos | Google Photos Library API, authenticated via browser session token |
+| Concern               | Method                                                                        |
+| --------------------- | ----------------------------------------------------------------------------- |
+| Listing your photos   | Google Photos Library API, authenticated via browser session token            |
 | Downloading originals | Playwright browser (Shift+D) — serves unmodified originals with full EXIF/GPS |
 
 1. **`lmpg auth`** saves a Playwright session to `~/.let-my-photos-go/auth.json`.
@@ -134,11 +131,11 @@ Shows total photos found, how many are downloaded, pending, and failed.
 
 All persistent state lives in `~/.let-my-photos-go/`:
 
-| File | Purpose |
-|---|---|
-| `auth.json` | Playwright browser session (Google cookies) |
-| `config.json` | Output directory |
-| `photos.db` | SQLite download checkpoint database |
+| File          | Purpose                                     |
+| ------------- | ------------------------------------------- |
+| `auth.json`   | Playwright browser session (Google cookies) |
+| `config.json` | Output directory                            |
+| `photos.db`   | SQLite download checkpoint database         |
 
 `auth.json` contains your Google session cookies — treat it like a password. It is never in your project directory and never committed to git.
 
@@ -146,27 +143,32 @@ All persistent state lives in `~/.let-my-photos-go/`:
 
 ## Session Expiry
 
-`auth.json` expires periodically. When `lmpg flee` detects an invalid session, it will tell you to run `lmpg auth` again.
+Google rotates session cookies aggressively — a multi-day download job will likely require re-authenticating at least once. `lmpg flee` detects an expired session mid-run, stops gracefully, and tells you what to do:
+
+```bash
+lmpg auth           # log in again
+lmpg flee --resume  # continue from where it left off
+```
 
 ---
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `lmpg auth` | Log in to Google Photos (saves browser session) |
-| `lmpg config` | Set output directory |
-| `lmpg flee [options]` | Enumerate and download all photos |
-| `lmpg flee --resume` | Skip re-enumeration; skip already-downloaded photos |
-| `lmpg flee --failed-only` | Only retry previously failed photos |
-| `lmpg flee --year <year>` | Filter by year |
-| `lmpg flee --from <date> --to <date>` | Filter by date range |
-| `lmpg flee --media-type photo\|video` | Filter by media type |
-| `lmpg flee --limit <n>` | Cap number of downloads |
-| `lmpg flee --concurrency <n>` | Parallel downloads (default: 3) |
-| `lmpg flee --inspect` | Headed browser with DevTools |
-| `lmpg status` | Show download progress |
-| `lmpg -v` | Print version |
+| Command                               | Description                                         |
+| ------------------------------------- | --------------------------------------------------- |
+| `lmpg auth`                           | Log in to Google Photos (saves browser session)     |
+| `lmpg config`                         | Set output directory                                |
+| `lmpg flee [options]`                 | Enumerate and download all photos                   |
+| `lmpg flee --resume`                  | Skip re-enumeration; skip already-downloaded photos |
+| `lmpg flee --failed-only`             | Only retry previously failed photos                 |
+| `lmpg flee --year <year>`             | Filter by year                                      |
+| `lmpg flee --from <date> --to <date>` | Filter by date range                                |
+| `lmpg flee --media-type photo\|video` | Filter by media type                                |
+| `lmpg flee --limit <n>`               | Cap number of downloads                             |
+| `lmpg flee --concurrency <n>`         | Parallel downloads (default: 3)                     |
+| `lmpg flee --inspect`                 | Headed browser with DevTools                        |
+| `lmpg status`                         | Show download progress                              |
+| `lmpg -v`                             | Print version                                       |
 
 ---
 
