@@ -57,6 +57,18 @@ async function runWithConcurrency<T>(
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, next));
 }
 
+async function probeNetwork(): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort(), 5000);
+    await fetch('https://www.google.com', { method: 'HEAD', signal: ctrl.signal });
+    clearTimeout(id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // --- command ---
 
 export const fleeCommand = new Command('flee')
@@ -180,9 +192,49 @@ export const fleeCommand = new Command('flee')
     const total = pending.length;
     const { downloaded: prevDownloaded, total: grandTotal } = getStats();
     let sessionExpired = false;
+    let shuttingDown = false;
+    let networkDown = false;
+    let networkMonitorRunning = false;
+    const networkRestoredCallbacks: Array<() => void> = [];
+
+    function waitForNetwork(): Promise<void> {
+      if (!networkDown) return Promise.resolve();
+      return new Promise(resolve => networkRestoredCallbacks.push(resolve));
+    }
+
+    function unblockNetworkWaiters(): void {
+      for (const cb of networkRestoredCallbacks.splice(0)) cb();
+    }
+
+    async function startNetworkMonitor(): Promise<void> {
+      if (networkMonitorRunning) return;
+      networkMonitorRunning = true;
+      while (networkDown && !shuttingDown && !sessionExpired) {
+        await new Promise(r => setTimeout(r, 5000));
+        if (!networkDown || shuttingDown || sessionExpired) break;
+        if (await probeNetwork()) {
+          networkDown = false;
+          clack.log.info('Network restored, resuming downloads…');
+          unblockNetworkWaiters();
+        }
+      }
+      networkMonitorRunning = false;
+    }
+
+    async function isNetworkIssue(err: Error): Promise<boolean> {
+      const msg = err.message;
+      if (
+        msg.includes('ERR_INTERNET_DISCONNECTED') ||
+        msg.includes('ERR_NETWORK_CHANGED') ||
+        msg.includes('ERR_NAME_NOT_RESOLVED') ||
+        msg.includes('ERR_CONNECTION_TIMED_OUT')
+      ) return true;
+      if (msg.toLowerCase().includes('timeout')) return !(await probeNetwork());
+      return false;
+    }
 
     const worker = async (photo: PhotoRecord) => {
-      if (sessionExpired) return;
+      if (sessionExpired || shuttingDown) return;
 
       // Reconcile: file already on disk at recorded path
       if (photo.dest_path && fs.existsSync(photo.dest_path)) {
@@ -193,73 +245,117 @@ export const fleeCommand = new Command('flee')
         return;
       }
 
-      const page = await context.newPage();
-      try {
-        const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
-        downloadPromise.catch(() => {}); // prevent unhandled rejection if page closes before download fires
+      while (true) {
+        const page = await context.newPage();
+        let shouldRetry = false;
+        try {
+          const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
+          downloadPromise.catch(() => {}); // prevent unhandled rejection if page closes before download fires
 
-        await page.goto(photo.google_url ?? `https://photos.google.com/photo/${photo.media_item_id}`, {
-          waitUntil: 'load',
-          timeout: 30000,
-        });
-        await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+          await page.goto(photo.google_url ?? `https://photos.google.com/photo/${photo.media_item_id}`, {
+            waitUntil: 'load',
+            timeout: 30000,
+          });
+          await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
 
-        if (!page.url().startsWith('https://photos.google.com/')) {
-          if (!sessionExpired) {
-            sessionExpired = true;
-            clack.log.error('Session expired — run `lmpg auth` to sign in again.');
+          if (!page.url().startsWith('https://photos.google.com/')) {
+            if (!sessionExpired) {
+              sessionExpired = true;
+              clack.log.error('Session expired — run `lmpg auth` to sign in again.');
+            }
+            return;
           }
-          return;
-        }
 
-        await page.keyboard.press('Shift+KeyD');
+          await page.keyboard.press('Shift+KeyD');
 
-        const download = await downloadPromise;
-        const filename = download.suggestedFilename() || `${photo.media_item_id}.jpg`;
-        const destPath = resolveDestPath(outputDir, photo, filename);
-        await download.saveAs(destPath);
+          const download = await downloadPromise;
+          const filename = download.suggestedFilename() || `${photo.media_item_id}.jpg`;
+          const destPath = resolveDestPath(outputDir, photo, filename);
+          await download.saveAs(destPath);
 
-        const tsMs = photo.creation_time ? new Date(photo.creation_time).getTime() : Date.now();
-        const applyTimestamps = (p: string) => utimes(p, { btime: tsMs, mtime: tsMs, atime: tsMs });
+          const tsMs = photo.creation_time ? new Date(photo.creation_time).getTime() : Date.now();
+          const applyTimestamps = (p: string) => utimes(p, { btime: tsMs, mtime: tsMs, atime: tsMs });
 
-        let actualDestPath = destPath;
-        let actualFilename = filename;
+          let actualDestPath = destPath;
+          let actualFilename = filename;
 
-        if (filename.toLowerCase().endsWith('.zip')) {
-          const zip = new AdmZip(destPath);
-          const stillEntry = zip.getEntries().find(e => /\.(heic|jpg|jpeg|png)$/i.test(e.entryName));
+          if (filename.toLowerCase().endsWith('.zip')) {
+            const zip = new AdmZip(destPath);
+            const stillEntry = zip.getEntries().find(e => /\.(heic|jpg|jpeg|png)$/i.test(e.entryName));
 
-          if (stillEntry) {
-            const resolvedStillPath = resolveDestPath(outputDir, photo, stillEntry.entryName);
-            const resolvedBase = resolvedStillPath.replace(/\.[^.]+$/, '');
+            if (stillEntry) {
+              const resolvedStillPath = resolveDestPath(outputDir, photo, stillEntry.entryName);
+              const resolvedBase = resolvedStillPath.replace(/\.[^.]+$/, '');
 
-            for (const entry of zip.getEntries()) {
-              const ext = path.extname(entry.entryName);
-              const outPath = resolvedBase + ext;
-              fs.writeFileSync(outPath, entry.getData());
-              await applyTimestamps(outPath);
+              for (const entry of zip.getEntries()) {
+                const ext = path.extname(entry.entryName);
+                const outPath = resolvedBase + ext;
+                fs.writeFileSync(outPath, entry.getData());
+                await applyTimestamps(outPath);
+              }
+
+              actualFilename = path.basename(resolvedStillPath);
+              actualDestPath = resolvedStillPath;
             }
 
-            actualFilename = path.basename(resolvedStillPath);
-            actualDestPath = resolvedStillPath;
+            fs.unlinkSync(destPath);
+          } else {
+            await applyTimestamps(destPath);
           }
 
-          fs.unlinkSync(destPath);
-        } else {
-          await applyTimestamps(destPath);
+          markDownloaded(photo.media_item_id, actualDestPath, actualFilename);
+          downloaded++;
+          clack.log.step(`[${prevDownloaded + downloaded + failed}/${grandTotal}] ✓ ${actualFilename}`);
+          return;
+        } catch (err) {
+          if (!shuttingDown && !sessionExpired && await isNetworkIssue(err as Error)) {
+            shouldRetry = true;
+            if (!networkDown) {
+              networkDown = true;
+              clack.log.warn('Network unavailable — waiting to reconnect…');
+              startNetworkMonitor();
+            }
+          } else {
+            markFailed(photo.media_item_id);
+            failed++;
+            clack.log.warn(`[${prevDownloaded + downloaded + failed}/${grandTotal}] ✗ ${photo.media_item_id}: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        } finally {
+          await page.close();
         }
-
-        markDownloaded(photo.media_item_id, actualDestPath, actualFilename);
-        downloaded++;
-        clack.log.step(`[${prevDownloaded + downloaded + failed}/${grandTotal}] ✓ ${actualFilename}`);
-      } catch (err) {
-        markFailed(photo.media_item_id);
-        failed++;
-        clack.log.warn(`[${prevDownloaded + downloaded + failed}/${grandTotal}] ✗ ${photo.media_item_id}: ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        await page.close();
+        if (shouldRetry) {
+          await waitForNetwork();
+          if (shuttingDown || sessionExpired) return;
+        } else {
+          return;
+        }
       }
     };
+
+    let inDownloadPhase = true;
+
+    process.once('SIGINT', () => {
+      if (inDownloadPhase) {
+        shuttingDown = true;
+        unblockNetworkWaiters();
+        clack.log.warn('Stopping after current downloads complete — saving session…');
+      } else {
+        process.exit(0);
+      }
+    });
+
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.on('data', (key: Buffer) => {
+        const k = key.toString();
+        if (k === '' || k === '') {
+          shuttingDown = true;
+          unblockNetworkWaiters();
+          clack.log.warn('Stopping after current downloads complete — saving session…');
+        }
+      });
+    }
 
     for (let chunkStart = 0; chunkStart < pending.length; chunkStart += BROWSER_RESTART_EVERY) {
       if (chunkStart > 0) {
@@ -269,14 +365,25 @@ export const fleeCommand = new Command('flee')
         ({ browser, context } = await launchHeadlessBrowser({ inspect: options.inspect }));
       }
       await runWithConcurrency(pending.slice(chunkStart, chunkStart + BROWSER_RESTART_EVERY), concurrency, worker);
-      if (sessionExpired) break;
+      if (sessionExpired || shuttingDown) break;
     }
+
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+    }
+    inDownloadPhase = false;
 
     await saveSession(context);
     await browser.close();
 
     if (sessionExpired) {
       clack.outro('Session expired. Run `lmpg auth`, then `lmpg flee --resume` to continue.');
+      return;
+    }
+
+    if (shuttingDown) {
+      clack.outro(`Paused at [${prevDownloaded + downloaded + failed}/${grandTotal}]. Run \`lmpg flee --resume\` to continue.`);
       return;
     }
 
