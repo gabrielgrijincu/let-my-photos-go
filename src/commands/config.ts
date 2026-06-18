@@ -20,20 +20,23 @@ export const configCommand = new Command('config')
     const outputDirInput = await clack.text({
       message: 'Output directory for downloaded photos:',
       initialValue: existing?.outputDir ?? DEFAULT_OUTPUT_DIR,
-      validate: (v) => (v?.trim() ? undefined : 'Required'),
+      validate: v => (v?.trim() ? undefined : 'Required'),
     });
-    if (clack.isCancel(outputDirInput)) { clack.cancel('Cancelled.'); process.exit(0); }
+    if (clack.isCancel(outputDirInput)) {
+      clack.cancel('Cancelled.');
+      process.exit(0);
+    }
 
-    const outputDir = (outputDirInput?.trim() ?? existing?.outputDir ?? DEFAULT_OUTPUT_DIR)
-      .replace(/^~/, os.homedir());
+    const outputDir = (outputDirInput?.trim() ?? existing?.outputDir ?? DEFAULT_OUTPUT_DIR).replace(/^~/, os.homedir());
 
     writeConfig({ outputDir });
     fs.mkdirSync(outputDir, { recursive: true });
     clack.log.success(`Config saved. Photos will download to: ${outputDir}`);
 
     const authExists = fs.existsSync(getAuthPath());
-    clack.outro(authExists
-      ? 'All set! Run `lmpg flee` to start downloading your photos. 🎉'
-      : 'Next: run `lmpg auth` to log in to Google Photos.'
+    clack.outro(
+      authExists
+        ? 'All set! Run `lmpg enumerate` to scan your library, then `lmpg flee` to download. 🎉'
+        : 'Next: run `lmpg auth` to log in to Google Photos.',
     );
   });

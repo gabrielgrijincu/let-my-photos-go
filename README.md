@@ -66,13 +66,28 @@ lmpg config
 
 Prompts for the directory where photos will be downloaded (default: `~/Pictures/let-my-photos-go`). That's it — no API credentials needed.
 
-### Step 3: Download everything (`lmpg flee`)
+### Step 3: Scan your library (`lmpg enumerate`)
+
+```bash
+lmpg enumerate
+```
+
+Launches a headless browser, calls the Google Photos internal API to list your entire library, and saves every photo's metadata (ID, creation time, dimensions, file size) to the local SQLite database. No files are downloaded yet.
+
+```bash
+lmpg enumerate --limit 10   # stop after 10 items (useful for testing)
+lmpg enumerate -l 10        # shorthand
+```
+
+Re-running `enumerate` is safe and fast — it updates existing records (dimensions, file size) and adds any newly uploaded photos without touching download state.
+
+### Step 4: Download everything (`lmpg flee`)
 
 ```bash
 lmpg flee
 ```
 
-Launches a headless browser with the saved session, enumerates all your photos, then downloads each one by triggering the "Download original" action (Shift+D) in the Google Photos web UI.
+Launches a headless browser with the saved session and downloads each pending photo by triggering the "Download original" action (Shift+D) in the Google Photos web UI.
 
 Photos are organised into subdirectories by year and month:
 
@@ -90,27 +105,77 @@ Photos are organised into subdirectories by year and month:
 
 **Filesystem timestamps** (Finder's "Date Created" and "Date Modified") are set to the photo's original capture time from the Google Photos API, so they reflect when the photo was actually taken, not when it was downloaded.
 
-Progress is checkpointed to `~/.let-my-photos-go/photos.db` (SQLite). If interrupted, just run again — already-downloaded photos are skipped.
+Progress is checkpointed to `~/.let-my-photos-go/photos.db` (SQLite). If interrupted, just run `lmpg flee` again — already-downloaded photos are skipped automatically.
 
 ```bash
-lmpg flee --resume          # skip re-enumeration if DB already has entries
-lmpg flee --year 2023       # only photos from 2023
-lmpg flee --from 2022-06    # photos from June 2022 onwards
-lmpg flee --media-type photo # photos only, skip videos
-lmpg flee --limit 10        # download at most 10 (useful for testing)
-lmpg flee --concurrency 5   # 5 parallel downloads (default: 3)
-lmpg flee --inspect         # headed browser with DevTools (for debugging)
+lmpg flee --failed-only          # only retry photos that previously failed
+lmpg flee -f                     # shorthand
+
+lmpg flee --year 2023            # only photos from 2023
+lmpg flee -y 2023                # shorthand
+
+lmpg flee --from 2022-06         # photos from June 2022 onwards
+lmpg flee --to 2023-12-31        # photos up to end of 2023
+lmpg flee --from 2022 --to 2023  # date range
+
+lmpg flee --media-type photo     # photos only, skip videos
+lmpg flee --media-type video     # videos only
+lmpg flee -m photo               # shorthand
+
+lmpg flee --limit 10             # download at most 10 (useful for testing)
+lmpg flee -l 10                  # shorthand
+
+lmpg flee --concurrency 5        # 5 parallel downloads (default: 3)
+lmpg flee -c 5                   # shorthand
+
+lmpg flee --inspect              # headed browser with DevTools (for debugging)
 ```
 
 > **Concurrency note:** The default of 3 is conservative on purpose. Values above 5–6 risk triggering Google's rate limiting or anti-automation detection, especially during multi-hour runs.
 
-### Step 4: Check progress (`lmpg status`)
+### Step 5: Check progress (`lmpg status`)
 
 ```bash
 lmpg status
 ```
 
 Shows total photos found, how many are downloaded, pending, and failed.
+
+### Step 6: Verify your downloads (`lmpg verify`)
+
+```bash
+lmpg verify
+```
+
+Checks every downloaded file in the database and automatically resets broken records to pending so `lmpg flee` can re-download them:
+
+- **Exists on disk** — catches missing files
+- **Non-empty** — catches zero-byte files
+- **Size matches** — compares actual size against Google's reported size (when available)
+- **Magic bytes** — checks the file header matches the extension (catches truncated or corrupt downloads)
+- **Companion .mov** — verifies Live Photo pairs are intact
+
+```bash
+lmpg verify --dry-run   # report issues without resetting records
+```
+
+---
+
+## Profiles
+
+Use `--profile` (or `-p`) to maintain separate databases, configs, and auth sessions — useful for multiple Google accounts:
+
+```bash
+lmpg -p work auth
+lmpg -p work config
+lmpg -p work enumerate
+lmpg -p work flee
+
+lmpg -p personal auth
+lmpg -p personal flee
+```
+
+Each profile stores its data in `~/.let-my-photos-go-<name>/` instead of `~/.let-my-photos-go/`.
 
 ---
 
@@ -122,14 +187,14 @@ Shows total photos found, how many are downloaded, pending, and failed.
 | Downloading originals | Playwright browser (Shift+D) — serves unmodified originals with full EXIF/GPS |
 
 1. **`lmpg auth`** saves a Playwright session to `~/.let-my-photos-go/auth.json`.
-2. **`lmpg flee`** intercepts the Bearer token the Google Photos web app uses internally, then calls the `mediaItems.list` API with it to enumerate your library. Downloads go through the browser session directly.
-3. Each file is saved to `<outputDir>/YYYY/MM/filename` and marked in SQLite. Re-runs skip completed photos. Duplicate filenames in the same month get a `_2`, `_3` suffix. iPhone Live Photos (downloaded as ZIPs) are extracted into a `.heic` + `.mov` pair with matching base names. Filesystem timestamps are set to the photo's original capture time.
+2. **`lmpg enumerate`** intercepts the Bearer token the Google Photos web app uses internally, then calls the `mediaItems.list` API with it to enumerate your library and populate the local SQLite database.
+3. **`lmpg flee`** opens each photo in the browser and presses Shift+D to trigger the original-file download. Each file is saved to `<outputDir>/YYYY/MM/filename` and marked in SQLite. Duplicate filenames in the same month get a `_2`, `_3` suffix. iPhone Live Photos (downloaded as ZIPs) are extracted into a `.heic` + `.mov` pair with matching base names. Filesystem timestamps are set to the photo's original capture time.
 
 ---
 
 ## Data Directory
 
-All persistent state lives in `~/.let-my-photos-go/`:
+All persistent state lives in `~/.let-my-photos-go/` (or `~/.let-my-photos-go-<profile>/` for named profiles):
 
 | File          | Purpose                                     |
 | ------------- | ------------------------------------------- |
@@ -146,29 +211,33 @@ All persistent state lives in `~/.let-my-photos-go/`:
 Google rotates session cookies aggressively — a multi-day download job will likely require re-authenticating at least once. `lmpg flee` detects an expired session mid-run, stops gracefully, and tells you what to do:
 
 ```bash
-lmpg auth           # log in again
-lmpg flee --resume  # continue from where it left off
+lmpg auth   # log in again
+lmpg flee   # continue from where it left off
 ```
 
 ---
 
 ## Commands
 
-| Command                               | Description                                         |
-| ------------------------------------- | --------------------------------------------------- |
-| `lmpg auth`                           | Log in to Google Photos (saves browser session)     |
-| `lmpg config`                         | Set output directory                                |
-| `lmpg flee [options]`                 | Enumerate and download all photos                   |
-| `lmpg flee --resume`                  | Skip re-enumeration; skip already-downloaded photos |
-| `lmpg flee --failed-only`             | Only retry previously failed photos                 |
-| `lmpg flee --year <year>`             | Filter by year                                      |
-| `lmpg flee --from <date> --to <date>` | Filter by date range                                |
-| `lmpg flee --media-type photo\|video` | Filter by media type                                |
-| `lmpg flee --limit <n>`               | Cap number of downloads                             |
-| `lmpg flee --concurrency <n>`         | Parallel downloads (default: 3)                     |
-| `lmpg flee --inspect`                 | Headed browser with DevTools                        |
-| `lmpg status`                         | Show download progress                              |
-| `lmpg -v`                             | Print version                                       |
+| Command                               | Short | Description                                              |
+| ------------------------------------- | ----- | -------------------------------------------------------- |
+| `lmpg auth`                           |       | Log in to Google Photos (saves browser session)          |
+| `lmpg config`                         |       | Set output directory                                     |
+| `lmpg enumerate`                      |       | Scan library and populate database                       |
+| `lmpg enumerate --limit <n>`          | `-l`  | Stop after n items (testing)                             |
+| `lmpg flee`                           |       | Download all pending photos                              |
+| `lmpg flee --failed-only`             | `-f`  | Only retry previously failed photos                      |
+| `lmpg flee --year <year>`             | `-y`  | Filter by year                                           |
+| `lmpg flee --from <date> --to <date>` |       | Filter by date range (YYYY, YYYY-MM, or YYYY-MM-DD)      |
+| `lmpg flee --media-type photo\|video` | `-m`  | Filter by media type                                     |
+| `lmpg flee --limit <n>`               | `-l`  | Cap number of downloads                                  |
+| `lmpg flee --concurrency <n>`         | `-c`  | Parallel downloads (default: 3)                          |
+| `lmpg flee --inspect`                 |       | Headed browser with DevTools                             |
+| `lmpg status`                         |       | Show download progress                                   |
+| `lmpg verify`                         |       | Check all downloaded files and reset broken records      |
+| `lmpg verify --dry-run`               |       | Report issues only, do not reset records                 |
+| `lmpg -p <name> <command>`            | `-p`  | Use a named profile (separate auth, DB, and config)      |
+| `lmpg -v`                             |       | Print version                                            |
 
 ---
 

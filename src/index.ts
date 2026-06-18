@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import { configCommand } from './commands/config.js';
 import { authCommand } from './commands/auth.js';
+import { enumerateCommand } from './commands/enumerate.js';
 import { fleeCommand } from './commands/flee.js';
 import { statusCommand } from './commands/status.js';
 import { verifyCommand } from './commands/verify.js';
@@ -20,6 +21,7 @@ program
 
 program.addCommand(authCommand);
 program.addCommand(configCommand);
+program.addCommand(enumerateCommand);
 program.addCommand(fleeCommand);
 program.addCommand(statusCommand);
 program.addCommand(verifyCommand);

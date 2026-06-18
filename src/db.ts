@@ -57,13 +57,13 @@ function migrate(db: Database.Database): void {
   `);
 
   const cols = (db.prepare(`PRAGMA table_info(photos)`).all() as { name: string }[]).map(r => r.name);
-  if (!cols.includes('creation_time'))  db.exec(`ALTER TABLE photos ADD COLUMN creation_time TEXT`);
-  if (!cols.includes('dest_path'))      db.exec(`ALTER TABLE photos ADD COLUMN dest_path TEXT`);
-  if (!cols.includes('mime_type'))      db.exec(`ALTER TABLE photos ADD COLUMN mime_type TEXT`);
+  if (!cols.includes('creation_time')) db.exec(`ALTER TABLE photos ADD COLUMN creation_time TEXT`);
+  if (!cols.includes('dest_path')) db.exec(`ALTER TABLE photos ADD COLUMN dest_path TEXT`);
+  if (!cols.includes('mime_type')) db.exec(`ALTER TABLE photos ADD COLUMN mime_type TEXT`);
   if (!cols.includes('companion_path')) db.exec(`ALTER TABLE photos ADD COLUMN companion_path TEXT`);
-  if (!cols.includes('width'))          db.exec(`ALTER TABLE photos ADD COLUMN width INTEGER`);
-  if (!cols.includes('height'))         db.exec(`ALTER TABLE photos ADD COLUMN height INTEGER`);
-  if (!cols.includes('expected_size'))  db.exec(`ALTER TABLE photos ADD COLUMN expected_size INTEGER`);
+  if (!cols.includes('width')) db.exec(`ALTER TABLE photos ADD COLUMN width INTEGER`);
+  if (!cols.includes('height')) db.exec(`ALTER TABLE photos ADD COLUMN height INTEGER`);
+  if (!cols.includes('expected_size')) db.exec(`ALTER TABLE photos ADD COLUMN expected_size INTEGER`);
 }
 
 export function upsertPhoto(
@@ -75,7 +75,8 @@ export function upsertPhoto(
   expectedSize: number | null = null,
 ): void {
   const db = getDb();
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO photos (media_item_id, google_url, creation_time, width, height, expected_size)
     VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT (media_item_id) DO UPDATE SET
@@ -84,16 +85,19 @@ export function upsertPhoto(
       width = excluded.width,
       height = excluded.height,
       expected_size = excluded.expected_size
-  `).run(mediaItemId, googleUrl, creationTime, width, height, expectedSize);
+  `,
+  ).run(mediaItemId, googleUrl, creationTime, width, height, expectedSize);
 }
 
 export function markDownloaded(mediaItemId: string, destPath: string, filename: string, companionPath?: string): void {
   const db = getDb();
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE photos
     SET status = 'downloaded', downloaded_at = datetime('now'), dest_path = ?, filename = ?, companion_path = ?
     WHERE media_item_id = ?
-  `).run(destPath, filename, companionPath ?? null, mediaItemId);
+  `,
+  ).run(destPath, filename, companionPath ?? null, mediaItemId);
 }
 
 export function markFailed(mediaItemId: string): void {
@@ -103,11 +107,13 @@ export function markFailed(mediaItemId: string): void {
 
 export function resetToPending(mediaItemId: string): void {
   const db = getDb();
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE photos
     SET status = 'pending', dest_path = NULL, downloaded_at = NULL, filename = '', companion_path = NULL
     WHERE media_item_id = ?
-  `).run(mediaItemId);
+  `,
+  ).run(mediaItemId);
 }
 
 export function setCompanionPath(mediaItemId: string, companionPath: string): void {
@@ -117,7 +123,9 @@ export function setCompanionPath(mediaItemId: string, companionPath: string): vo
 
 export function getDestPathOwner(destPath: string): string | null {
   const db = getDb();
-  const row = db.prepare(`SELECT media_item_id FROM photos WHERE dest_path = ?`).get(destPath) as { media_item_id: string } | undefined;
+  const row = db.prepare(`SELECT media_item_id FROM photos WHERE dest_path = ?`).get(destPath) as
+    | { media_item_id: string }
+    | undefined;
   return row?.media_item_id ?? null;
 }
 
@@ -156,7 +164,10 @@ export function getPendingPhotos(filter: PhotoFilter = {}): PhotoRecord[] {
 
 export function getStats(): { total: number; downloaded: number; failed: number; pending: number } {
   const db = getDb();
-  const rows = db.prepare(`SELECT status, COUNT(*) as count FROM photos GROUP BY status`).all() as { status: string; count: number }[];
+  const rows = db.prepare(`SELECT status, COUNT(*) as count FROM photos GROUP BY status`).all() as {
+    status: string;
+    count: number;
+  }[];
   const stats = { total: 0, downloaded: 0, failed: 0, pending: 0 };
   for (const row of rows) {
     stats.total += row.count;

@@ -47,5 +47,5 @@ export const authCommand = new Command('auth')
 
     await browser.close();
 
-    clack.outro("Logged in! Run `lmpg config` to configure your download settings.");
+    clack.outro('Logged in! Run `lmpg config` to configure your download settings.');
   });

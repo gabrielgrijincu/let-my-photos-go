@@ -1,13 +1,17 @@
 import { chromium, Browser, BrowserContext } from 'playwright';
 import { getAuthPath } from './paths.js';
 
-export async function launchHeadedBrowser(storageState?: string): Promise<{ browser: Browser; context: BrowserContext }> {
+export async function launchHeadedBrowser(
+  storageState?: string,
+): Promise<{ browser: Browser; context: BrowserContext }> {
   const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext(storageState ? { storageState } : {});
   return { browser, context };
 }
 
-export async function launchHeadlessBrowser(opts: { inspect?: boolean } = {}): Promise<{ browser: Browser; context: BrowserContext }> {
+export async function launchHeadlessBrowser(
+  opts: { inspect?: boolean } = {},
+): Promise<{ browser: Browser; context: BrowserContext }> {
   const browser = await chromium.launch({
     headless: !opts.inspect,
     // args: opts.inspect ? ['--auto-open-devtools-for-tabs'] : [],

@@ -14,9 +14,15 @@ export function getDataDir(): string {
     : path.join(os.homedir(), '.let-my-photos-go');
 }
 
-export function getAuthPath():   string { return path.join(getDataDir(), 'auth.json'); }
-export function getConfigPath(): string { return path.join(getDataDir(), 'config.json'); }
-export function getDbPath():     string { return path.join(getDataDir(), 'photos.db'); }
+export function getAuthPath(): string {
+  return path.join(getDataDir(), 'auth.json');
+}
+export function getConfigPath(): string {
+  return path.join(getDataDir(), 'config.json');
+}
+export function getDbPath(): string {
+  return path.join(getDataDir(), 'photos.db');
+}
 
 export function ensureDataDir(): void {
   fs.mkdirSync(getDataDir(), { recursive: true });

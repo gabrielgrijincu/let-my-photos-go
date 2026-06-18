@@ -51,11 +51,15 @@ async function extractBatchParams(context: BrowserContext): Promise<BatchParams>
 
     context.on('request', onRequest);
 
-    context.newPage().then(page => {
-      page.goto('https://photos.google.com', { waitUntil: 'networkidle', timeout: 28_000 })
-        .catch(() => {})
-        .finally(() => page.close().catch(() => {}));
-    }).catch(reject);
+    context
+      .newPage()
+      .then(page => {
+        page
+          .goto('https://photos.google.com', { waitUntil: 'networkidle', timeout: 28_000 })
+          .catch(() => {})
+          .finally(() => page.close().catch(() => {}));
+      })
+      .catch(reject);
   });
 }
 
@@ -73,14 +77,15 @@ function parseBatchResponse(text: string): {
 
   const outer = JSON.parse(firstChunk) as Array<unknown[]>;
   const lcxiM = outer.find(
-    (e): e is [string, string, string] =>
-      Array.isArray(e) && e[0] === 'wrb.fr' && e[1] === 'lcxiM'
+    (e): e is [string, string, string] => Array.isArray(e) && e[0] === 'wrb.fr' && e[1] === 'lcxiM',
   );
   if (!lcxiM) throw new Error('Expected lcxiM RPC entry not found in batchexecute response');
 
   const inner = JSON.parse(lcxiM[2]);
   if (!Array.isArray(inner)) {
-    throw new Error(`Unexpected batchexecute inner response (type=${typeof inner}): ${JSON.stringify(inner)?.slice(0, 300)}`);
+    throw new Error(
+      `Unexpected batchexecute inner response (type=${typeof inner}): ${JSON.stringify(inner)?.slice(0, 300)}`,
+    );
   }
   return {
     items: (Array.isArray(inner[0]) ? inner[0] : []) as unknown[][],
@@ -91,7 +96,7 @@ function parseBatchResponse(text: string): {
 
 export async function* enumerateAllMediaItems(
   context: BrowserContext,
-  onProgress?: (count: number) => void
+  onProgress?: (count: number) => void,
 ): AsyncGenerator<MediaItem> {
   const params = await extractBatchParams(context);
 
@@ -124,12 +129,12 @@ export async function* enumerateAllMediaItems(
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
         'X-Same-Domain': '1',
-        'Origin': 'https://photos.google.com',
-        'Referer': 'https://photos.google.com/',
+        Origin: 'https://photos.google.com',
+        Referer: 'https://photos.google.com/',
       },
       form: {
         'f.req': freqBody,
-        'at': params.at,
+        at: params.at,
       },
     });
 
@@ -137,13 +142,12 @@ export async function* enumerateAllMediaItems(
       throw new Error(`batchexecute failed (${response.status()}): ${await response.text()}`);
     }
 
-    const { items, continuationToken: nextToken, lastTimestamp: nextTs } =
-      parseBatchResponse(await response.text());
+    const { items, continuationToken: nextToken, lastTimestamp: nextTs } = parseBatchResponse(await response.text());
 
     for (const item of items) {
       const arr = item as unknown[];
       const id = arr[0] as string;
-      const meta = Array.isArray(arr[1]) ? arr[1] as unknown[] : null;
+      const meta = Array.isArray(arr[1]) ? (arr[1] as unknown[]) : null;
       const creationTime = arr[2] as number | null;
 
       totalFetched++;
@@ -153,9 +157,9 @@ export async function* enumerateAllMediaItems(
         id,
         productUrl: `https://photos.google.com/photo/${id}`,
         creationTime: creationTime ?? null,
-        width:        meta ? (meta[1] as number | null) ?? null : null,
-        height:       meta ? (meta[2] as number | null) ?? null : null,
-        expectedSize: meta && Array.isArray(meta[9]) ? (meta[9] as number[])[0] ?? null : null,
+        width: meta ? ((meta[1] as number | null) ?? null) : null,
+        height: meta ? ((meta[2] as number | null) ?? null) : null,
+        expectedSize: meta && Array.isArray(meta[9]) ? ((meta[9] as number[])[0] ?? null) : null,
       };
     }
 
