@@ -12,6 +12,7 @@ export interface PhotoRecord {
   google_url: string | null;
   creation_time: string | null;
   dest_path: string | null;
+  companion_path: string | null;
   created_at: string;
 }
 
@@ -50,9 +51,10 @@ function migrate(db: Database.Database): void {
   `);
 
   const cols = (db.prepare(`PRAGMA table_info(photos)`).all() as { name: string }[]).map(r => r.name);
-  if (!cols.includes('creation_time')) db.exec(`ALTER TABLE photos ADD COLUMN creation_time TEXT`);
-  if (!cols.includes('dest_path'))     db.exec(`ALTER TABLE photos ADD COLUMN dest_path TEXT`);
-  if (!cols.includes('mime_type'))     db.exec(`ALTER TABLE photos ADD COLUMN mime_type TEXT`);
+  if (!cols.includes('creation_time'))  db.exec(`ALTER TABLE photos ADD COLUMN creation_time TEXT`);
+  if (!cols.includes('dest_path'))      db.exec(`ALTER TABLE photos ADD COLUMN dest_path TEXT`);
+  if (!cols.includes('mime_type'))      db.exec(`ALTER TABLE photos ADD COLUMN mime_type TEXT`);
+  if (!cols.includes('companion_path')) db.exec(`ALTER TABLE photos ADD COLUMN companion_path TEXT`);
 }
 
 export function upsertPhoto(
@@ -68,13 +70,13 @@ export function upsertPhoto(
   `).run(mediaItemId, googleUrl, creationTime);
 }
 
-export function markDownloaded(mediaItemId: string, destPath: string, filename: string): void {
+export function markDownloaded(mediaItemId: string, destPath: string, filename: string, companionPath?: string): void {
   const db = getDb();
   db.prepare(`
     UPDATE photos
-    SET status = 'downloaded', downloaded_at = datetime('now'), dest_path = ?, filename = ?
+    SET status = 'downloaded', downloaded_at = datetime('now'), dest_path = ?, filename = ?, companion_path = ?
     WHERE media_item_id = ?
-  `).run(destPath, filename, mediaItemId);
+  `).run(destPath, filename, companionPath ?? null, mediaItemId);
 }
 
 export function markFailed(mediaItemId: string): void {
@@ -86,9 +88,14 @@ export function resetToPending(mediaItemId: string): void {
   const db = getDb();
   db.prepare(`
     UPDATE photos
-    SET status = 'pending', dest_path = NULL, downloaded_at = NULL, filename = ''
+    SET status = 'pending', dest_path = NULL, downloaded_at = NULL, filename = '', companion_path = NULL
     WHERE media_item_id = ?
   `).run(mediaItemId);
+}
+
+export function setCompanionPath(mediaItemId: string, companionPath: string): void {
+  const db = getDb();
+  db.prepare(`UPDATE photos SET companion_path = ? WHERE media_item_id = ?`).run(companionPath, mediaItemId);
 }
 
 export function getDestPathOwner(destPath: string): string | null {

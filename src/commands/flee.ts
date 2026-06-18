@@ -6,7 +6,7 @@ import AdmZip from 'adm-zip';
 import { utimes } from 'utimes';
 import { launchHeadlessBrowser, saveSession, AUTH_PATH } from '../browser.js';
 import { enumerateAllMediaItems } from '../api.js';
-import { upsertPhoto, markDownloaded, markFailed, getPendingPhotos, hasAnyPhotos, getDestPathOwner, getStats } from '../db.js';
+import { upsertPhoto, markDownloaded, markFailed, getPendingPhotos, hasAnyPhotos, getDestPathOwner, getStats, setCompanionPath } from '../db.js';
 import { readConfig } from '../config.js';
 import type { PhotoRecord, PhotoFilter } from '../db.js';
 
@@ -308,11 +308,13 @@ export const fleeCommand = new Command('flee')
             } finally {
               try { fs.unlinkSync(destPath); } catch { /* ignore */ }
             }
+
+            const companionPath = extractedPaths.find(p => p !== actualDestPath);
+            markDownloaded(photo.media_item_id, actualDestPath, actualFilename, companionPath);
           } else {
             await applyTimestamps(destPath);
+            markDownloaded(photo.media_item_id, actualDestPath, actualFilename);
           }
-
-          markDownloaded(photo.media_item_id, actualDestPath, actualFilename);
           downloaded++;
           clack.log.step(`[${prevDownloaded + downloaded + failed}/${grandTotal}] ✓ ${actualFilename}`);
           return;
