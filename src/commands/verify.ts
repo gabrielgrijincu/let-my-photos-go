@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import * as clack from '@clack/prompts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { getDb, resetToPending, setCompanionPath } from '../db.js';
+import { getDb, markVerified, resetToPending, setCompanionPath } from '../db.js';
 import type { PhotoRecord } from '../db.js';
 import { readConfig } from '../config.js';
 
@@ -71,9 +71,9 @@ async function checkMagicBytes(filePath: string): Promise<boolean> {
 }
 
 export const verifyCommand = new Command('verify')
-  .description('Check all downloaded photos exist on disk and are non-empty')
-  .option('--dry-run', 'Report issues without resetting records for re-download')
-  .action(async (opts: { dryRun?: boolean }, cmd: Command) => {
+  .description('Check unverified downloaded photos exist on disk and are non-empty')
+  .option('--fix', 'Reset records with issues to pending for re-download')
+  .action(async (opts: { fix?: boolean }, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Verify');
@@ -84,21 +84,29 @@ export const verifyCommand = new Command('verify')
     let total: number;
     try {
       const db = getDb();
-      total = (
+      const downloaded = (
         db.prepare(`SELECT COUNT(*) as count FROM photos WHERE status = 'downloaded'`).get() as { count: number }
       ).count;
+      if (downloaded === 0) {
+        clack.log.info(`No downloaded photos to verify.`);
+        return;
+      }
+      total = (
+        db
+          .prepare(`SELECT COUNT(*) as count FROM photos WHERE status = 'downloaded' AND verified_at IS NULL`)
+          .get() as { count: number }
+      ).count;
+      if (total === 0) {
+        clack.log.success(`All ${downloaded.toLocaleString()} downloaded photos already verified.`);
+        return;
+      }
     } catch {
       clack.log.info(`No database found yet. Run \`${lmpg('enumerate')}\` to scan your library first.`);
       return;
     }
 
-    if (total === 0) {
-      clack.log.info('No downloaded photos to verify.');
-      return;
-    }
-
     const spinner = clack.spinner();
-    spinner.start(`Verifying ${total.toLocaleString()} downloaded photos…`);
+    spinner.start(`Verifying ${total.toLocaleString()} unverified photos…`);
 
     let stopping = false;
 
@@ -121,11 +129,19 @@ export const verifyCommand = new Command('verify')
 
     const db = getDb();
     for (const record of db
-      .prepare(`SELECT * FROM photos WHERE status = 'downloaded'`)
+      .prepare(`SELECT * FROM photos WHERE status = 'downloaded' AND verified_at IS NULL`)
       .iterate() as Iterable<PhotoRecord>) {
       if (stopping) break;
       checked++;
       spinner.message(`Verifying ${checked.toLocaleString()} / ${total.toLocaleString()}…`);
+
+      const issuesBefore = issues.length;
+
+      // --- stale zip ---
+      if (record.dest_path?.endsWith('.zip')) {
+        issues.push({ record, reason: 'stale-zip' });
+        continue;
+      }
 
       // --- primary file ---
       if (!record.dest_path) {
@@ -178,6 +194,10 @@ export const verifyCommand = new Command('verify')
           issues.push({ record, reason: 'corrupt-companion' });
         }
       }
+
+      if (issues.length === issuesBefore) {
+        markVerified(record.media_item_id);
+      }
     }
 
     if (process.stdin.isTTY) {
@@ -188,15 +208,6 @@ export const verifyCommand = new Command('verify')
     // Apply backfills after the iterator is closed (can't write while iterating)
     for (const { mediaItemId, companionPath } of pendingBackfills) {
       setCompanionPath(mediaItemId, companionPath);
-    }
-
-    // Second pass: records marked downloaded that still point at a .zip (skip if interrupted)
-    if (!stopping) {
-      for (const record of db
-        .prepare(`SELECT * FROM photos WHERE status = 'downloaded' AND dest_path LIKE '%.zip'`)
-        .iterate() as Iterable<PhotoRecord>) {
-        issues.push({ record, reason: 'stale-zip' });
-      }
     }
 
     spinner.stop(
@@ -238,7 +249,7 @@ export const verifyCommand = new Command('verify')
 
     clack.log.error(`${issues.length.toLocaleString()} issue(s) found out of ${checked.toLocaleString()} checked.`);
 
-    if (!opts.dryRun) {
+    if (opts.fix) {
       for (const { record } of issues) {
         resetToPending(record.media_item_id);
       }
@@ -246,6 +257,6 @@ export const verifyCommand = new Command('verify')
         `Reset ${issues.length.toLocaleString()} record(s) to pending. Run \`${lmpg('flee')}\` to re-download.`,
       );
     } else {
-      clack.log.info(`Dry run — records not reset. Run \`${lmpg('verify')}\` without --dry-run to fix.`);
+      clack.log.info(`Run \`${lmpg('verify --fix')}\` to reset these records for re-download.`);
     }
   });

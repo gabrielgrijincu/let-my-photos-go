@@ -143,16 +143,17 @@ Shows total photos found, how many are downloaded, pending, and failed.
 lmpg verify
 ```
 
-Checks every downloaded file in the database and automatically resets broken records to pending so `lmpg flee` can re-download them:
+Checks every **unverified** downloaded file and reports any problems. Already-verified photos are skipped, so repeated runs are fast — only newly downloaded photos are checked each time.
 
 - **Exists on disk** — catches missing files
 - **Non-empty** — catches zero-byte files
-- **Size matches** — compares actual size against Google's reported size (when available)
 - **Magic bytes** — checks the file header matches the extension (catches truncated or corrupt downloads)
 - **Companion .mov** — verifies Live Photo pairs are intact
 
+By default, `verify` only reports issues. Add `--fix` to reset broken records to pending so `lmpg flee` can re-download them:
+
 ```bash
-lmpg verify --dry-run   # report issues without resetting records
+lmpg verify --fix   # reset broken records for re-download
 ```
 
 ---
@@ -244,8 +245,8 @@ If `lmpg enumerate` reports more items than `lmpg status` shows as the database 
 | `lmpg flee --concurrency <n>`         | `-c`  | Parallel downloads (default: 3)                          |
 | `lmpg flee --inspect`                 |       | Headed browser with DevTools                             |
 | `lmpg status`                         |       | Show download progress                                   |
-| `lmpg verify`                         |       | Check all downloaded files and reset broken records      |
-| `lmpg verify --dry-run`               |       | Report issues only, do not reset records                 |
+| `lmpg verify`                         |       | Check unverified downloaded files and report issues      |
+| `lmpg verify --fix`                   |       | Also reset broken records to pending for re-download     |
 | `lmpg -p <name> <command>`            | `-p`  | Use a named profile (separate auth, DB, and config)      |
 | `lmpg -v`                             |       | Print version                                            |
 

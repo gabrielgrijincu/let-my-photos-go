@@ -16,6 +16,7 @@ export interface PhotoRecord {
   width: number | null;
   height: number | null;
   created_at: string;
+  verified_at: string | null;
 }
 
 export interface PhotoFilter {
@@ -61,6 +62,7 @@ function migrate(db: Database.Database): void {
   if (!cols.includes('companion_path')) db.exec(`ALTER TABLE photos ADD COLUMN companion_path TEXT`);
   if (!cols.includes('width')) db.exec(`ALTER TABLE photos ADD COLUMN width INTEGER`);
   if (!cols.includes('height')) db.exec(`ALTER TABLE photos ADD COLUMN height INTEGER`);
+  if (!cols.includes('verified_at')) db.exec(`ALTER TABLE photos ADD COLUMN verified_at TEXT`);
 }
 
 export function upsertPhoto(
@@ -100,12 +102,17 @@ export function markFailed(mediaItemId: string): void {
   db.prepare(`UPDATE photos SET status = 'failed' WHERE media_item_id = ?`).run(mediaItemId);
 }
 
+export function markVerified(mediaItemId: string): void {
+  const db = getDb();
+  db.prepare(`UPDATE photos SET verified_at = datetime('now') WHERE media_item_id = ?`).run(mediaItemId);
+}
+
 export function resetToPending(mediaItemId: string): void {
   const db = getDb();
   db.prepare(
     `
     UPDATE photos
-    SET status = 'pending', dest_path = NULL, downloaded_at = NULL, filename = '', companion_path = NULL
+    SET status = 'pending', dest_path = NULL, downloaded_at = NULL, filename = '', companion_path = NULL, verified_at = NULL
     WHERE media_item_id = ?
   `,
   ).run(mediaItemId);
