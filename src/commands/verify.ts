@@ -50,9 +50,7 @@ export const verifyCommand = new Command('verify')
     const db = getDb();
     for (const record of db.prepare(`SELECT * FROM photos WHERE status = 'downloaded'`).iterate() as Iterable<PhotoRecord>) {
       checked++;
-      if (checked % 500 === 0) {
-        spinner.message(`Verifying ${checked.toLocaleString()} / ${total.toLocaleString()}…`);
-      }
+      spinner.message(`Verifying ${checked.toLocaleString()} / ${total.toLocaleString()}…`);
 
       // --- primary file ---
       if (!record.dest_path || !(await fileExists(record.dest_path))) {

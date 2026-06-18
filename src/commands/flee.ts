@@ -306,7 +306,13 @@ export const fleeCommand = new Command('flee')
               }
               throw zipErr;
             } finally {
-              try { fs.unlinkSync(destPath); } catch { /* ignore */ }
+              for (let attempt = 0; attempt < 3; attempt++) {
+                try { fs.unlinkSync(destPath); break; } catch (e) {
+                  if ((e as NodeJS.ErrnoException).code === 'ENOENT') break;
+                  if (attempt < 2) await new Promise(r => setTimeout(r, 500));
+                  else clack.log.warn(`Could not delete ZIP ${destPath}: ${(e as Error).message}`);
+                }
+              }
             }
 
             const companionPath = extractedPaths.find(p => p !== actualDestPath);
