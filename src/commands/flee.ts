@@ -4,7 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import AdmZip from 'adm-zip';
 import { utimes } from 'utimes';
-import { launchHeadlessBrowser, saveSession, AUTH_PATH } from '../browser.js';
+import { launchHeadlessBrowser, saveSession } from '../browser.js';
+import { getAuthPath } from '../paths.js';
 import { enumerateAllMediaItems } from '../api.js';
 import { upsertPhoto, markDownloaded, markFailed, getPendingPhotos, hasAnyPhotos, getDestPathOwner, getStats, setCompanionPath } from '../db.js';
 import { readConfig } from '../config.js';
@@ -73,15 +74,15 @@ async function probeNetwork(): Promise<boolean> {
 
 export const fleeCommand = new Command('flee')
   .description('Download all your Google Photos with full metadata')
-  .option('--resume',              'Skip already-downloaded photos; skip re-enumeration if DB has entries')
-  .option('--failed-only',         'Only retry photos that previously failed')
-  .option('--year <year>',         'Only download photos from a specific year (e.g. 2023)')
-  .option('--from <date>',         'Only download photos on or after this date (YYYY, YYYY-MM, or YYYY-MM-DD)')
-  .option('--to <date>',           'Only download photos on or before this date (YYYY, YYYY-MM, or YYYY-MM-DD)')
-  .option('--media-type <type>',   'Filter by media type: photo or video', 'all')
-  .option('--limit <n>',           'Maximum number of photos to download', parseInt)
-  .option('--concurrency <n>',     'Number of parallel downloads', parseInt)
-  .option('--inspect',             'Open a visible browser with DevTools for each download (for debugging)')
+  .option('-r, --resume',              'Skip already-downloaded photos; skip re-enumeration if DB has entries')
+  .option('-f, --failed-only',         'Only retry photos that previously failed')
+  .option('-y, --year <year>',         'Only download photos from a specific year (e.g. 2023)')
+  .option('--from <date>',             'Only download photos on or after this date (YYYY, YYYY-MM, or YYYY-MM-DD)')
+  .option('--to <date>',               'Only download photos on or before this date (YYYY, YYYY-MM, or YYYY-MM-DD)')
+  .option('-m, --media-type <type>',   'Filter by media type: photo or video', 'all')
+  .option('-l, --limit <n>',           'Maximum number of photos to download', parseInt)
+  .option('-c, --concurrency <n>',     'Number of parallel downloads', parseInt)
+  .option('--inspect',                 'Open a visible browser with DevTools for each download (for debugging)')
   .action(async (options: {
     resume?: boolean;
     failedOnly?: boolean;
@@ -100,7 +101,7 @@ export const fleeCommand = new Command('flee')
       clack.log.error('No config found. Run `lmpg config` first.');
       process.exit(1);
     }
-    if (!fs.existsSync(AUTH_PATH)) {
+    if (!fs.existsSync(getAuthPath())) {
       clack.log.error('No browser session found. Run `lmpg auth` first.');
       process.exit(1);
     }

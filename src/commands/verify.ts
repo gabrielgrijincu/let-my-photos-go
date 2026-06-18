@@ -20,7 +20,7 @@ async function fileSize(p: string): Promise<number> {
 
 export const verifyCommand = new Command('verify')
   .description('Check all downloaded photos exist on disk and are non-empty')
-  .option('--fix', 'Reset broken records to pending so `flee --resume` can re-download them')
+  .option('-f, --fix', 'Reset broken records to pending so `flee --resume` can re-download them')
   .action(async (opts: { fix?: boolean }) => {
     clack.intro('🕊️  Let My Photos Go — Verify');
 

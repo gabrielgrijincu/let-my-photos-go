@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { DB_PATH } from './paths.js';
+import { getDbPath } from './paths.js';
 
 export type PhotoStatus = 'pending' | 'downloaded' | 'failed';
 
@@ -25,10 +25,13 @@ export interface PhotoFilter {
 }
 
 let _db: Database.Database | null = null;
+let _dbPath: string | null = null;
 
 export function getDb(): Database.Database {
-  if (!_db) {
-    _db = new Database(DB_PATH);
+  const currentPath = getDbPath();
+  if (!_db || _dbPath !== currentPath) {
+    _db = new Database(currentPath);
+    _dbPath = currentPath;
     _db.pragma('journal_mode = WAL');
     migrate(_db);
   }

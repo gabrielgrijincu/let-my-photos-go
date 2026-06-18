@@ -1,7 +1,5 @@
 import { chromium, Browser, BrowserContext } from 'playwright';
-import { AUTH_PATH } from './paths.js';
-
-export { AUTH_PATH };
+import { getAuthPath } from './paths.js';
 
 export async function launchHeadedBrowser(storageState?: string): Promise<{ browser: Browser; context: BrowserContext }> {
   const browser = await chromium.launch({ headless: false });
@@ -14,12 +12,12 @@ export async function launchHeadlessBrowser(opts: { inspect?: boolean } = {}): P
     headless: !opts.inspect,
     // args: opts.inspect ? ['--auto-open-devtools-for-tabs'] : [],
   });
-  const context = await browser.newContext({ storageState: AUTH_PATH });
+  const context = await browser.newContext({ storageState: getAuthPath() });
   return { browser, context };
 }
 
 export async function saveSession(context: BrowserContext): Promise<void> {
-  await context.storageState({ path: AUTH_PATH });
+  await context.storageState({ path: getAuthPath() });
 }
 
 export async function isSessionValid(context: BrowserContext): Promise<boolean> {

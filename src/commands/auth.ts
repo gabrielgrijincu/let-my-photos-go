@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as clack from '@clack/prompts';
-import { launchHeadedBrowser, saveSession, AUTH_PATH } from '../browser.js';
-import { ensureDataDir } from '../paths.js';
+import { launchHeadedBrowser, saveSession } from '../browser.js';
+import { ensureDataDir, getAuthPath } from '../paths.js';
 
 export const authCommand = new Command('auth')
   .description('Log in to Google Photos (saves browser session for downloads)')
@@ -11,7 +11,8 @@ export const authCommand = new Command('auth')
 
     ensureDataDir();
 
-    if (fs.existsSync(AUTH_PATH)) {
+    const authPath = getAuthPath();
+    if (fs.existsSync(authPath)) {
       clack.log.warn('An existing session was found in auth.json. Re-authenticating will overwrite it.');
       const confirm = await clack.confirm({ message: 'Continue and log in again?' });
       if (clack.isCancel(confirm) || !confirm) {
@@ -24,7 +25,7 @@ export const authCommand = new Command('auth')
 
     const spinner = clack.spinner();
     spinner.start('Launching browser…');
-    const { browser, context } = await launchHeadedBrowser(fs.existsSync(AUTH_PATH) ? AUTH_PATH : undefined);
+    const { browser, context } = await launchHeadedBrowser(fs.existsSync(authPath) ? authPath : undefined);
     const page = await context.newPage();
     spinner.stop('Browser launched.');
 

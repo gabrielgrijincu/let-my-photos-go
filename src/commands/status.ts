@@ -2,14 +2,14 @@ import { Command } from 'commander';
 import * as clack from '@clack/prompts';
 import * as fs from 'fs';
 import { getStats } from '../db.js';
-import { AUTH_PATH } from '../paths.js';
+import { getAuthPath } from '../paths.js';
 
 export const statusCommand = new Command('status')
   .description('Show download progress')
   .action(() => {
     clack.intro('🕊️  Let My Photos Go — Status');
 
-    const authExists = fs.existsSync(AUTH_PATH);
+    const authExists = fs.existsSync(getAuthPath());
     if (!authExists) {
       clack.log.warn('No auth.json — not logged in. Run `lmpg auth` first.');
     } else {
