@@ -36,7 +36,11 @@ const MAGIC_BYTES: Record<string, (b: Buffer) => boolean> = {
     b[10] === 0x42 &&
     b[11] === 0x50,
   '.heic': b => b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70,
-  '.mov': b => b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70,
+  // MOV/QuickTime files can start with ftyp (modern) or older atoms like wide, mdat, moov, free
+  '.mov': b => {
+    const type = String.fromCharCode(b[4], b[5], b[6], b[7]);
+    return ['ftyp', 'wide', 'mdat', 'moov', 'free', 'skip', 'pnot'].includes(type);
+  },
   '.mp4': b => b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70,
   '.m4v': b => b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70,
 };
