@@ -30,7 +30,7 @@ export const enumerateCommand = new Command('enumerate')
         apiCount = n;
       })) {
         const creationTime = item.creationTime ? new Date(item.creationTime).toISOString() : null;
-        upsertPhoto(item.id, item.productUrl, creationTime, item.width, item.height, item.expectedSize);
+        upsertPhoto(item.id, item.productUrl, creationTime, item.width, item.height);
         if (options.limit && apiCount >= options.limit) break;
       }
     } catch (err) {

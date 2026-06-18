@@ -9,7 +9,6 @@ import { readConfig } from '../config.js';
 type IssueReason =
   | 'missing'
   | 'empty'
-  | 'size-mismatch'
   | 'corrupt'
   | 'stale-zip'
   | 'missing-companion'
@@ -164,17 +163,6 @@ export const verifyCommand = new Command('verify')
         if (companionExists) companionSize = await fileSize(companionAbs);
       }
 
-      // --- size check (accepts HEIC-only or HEIC+MOV combined) ---
-      if (record.expected_size !== null) {
-        const sizeOk =
-          actualSize === record.expected_size ||
-          (companionExists && companionSize > 0 && actualSize + companionSize === record.expected_size);
-        if (!sizeOk) {
-          issues.push({ record, reason: 'size-mismatch' });
-          continue;
-        }
-      }
-
       if (!(await checkMagicBytes(absFile))) {
         issues.push({ record, reason: 'corrupt' });
         continue;
@@ -234,20 +222,18 @@ export const verifyCommand = new Command('verify')
     for (const { record, reason } of issues) {
       const label =
         reason === 'missing'
-          ? 'MISSING       '
+          ? 'MISSING      '
           : reason === 'empty'
-            ? 'EMPTY         '
-            : reason === 'size-mismatch'
-              ? 'SIZE MISMATCH '
-              : reason === 'corrupt'
-                ? 'CORRUPT       '
-                : reason === 'stale-zip'
-                  ? 'STALE ZIP     '
-                  : reason === 'missing-companion'
-                    ? 'NO COMPANION  '
-                    : reason === 'empty-companion'
-                      ? 'EMPTY MOV     '
-                      : 'CORRUPT MOV   ';
+            ? 'EMPTY        '
+            : reason === 'corrupt'
+              ? 'CORRUPT      '
+              : reason === 'stale-zip'
+                ? 'STALE ZIP    '
+                : reason === 'missing-companion'
+                  ? 'NO COMPANION '
+                  : reason === 'empty-companion'
+                    ? 'EMPTY MOV    '
+                    : 'CORRUPT MOV  ';
       clack.log.warn(`${label}  ${record.dest_path ?? `(no path) id=${record.media_item_id}`}`);
     }
 

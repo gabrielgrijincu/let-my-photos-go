@@ -15,7 +15,6 @@ export interface PhotoRecord {
   companion_path: string | null;
   width: number | null;
   height: number | null;
-  expected_size: number | null;
   created_at: string;
 }
 
@@ -62,7 +61,6 @@ function migrate(db: Database.Database): void {
   if (!cols.includes('companion_path')) db.exec(`ALTER TABLE photos ADD COLUMN companion_path TEXT`);
   if (!cols.includes('width')) db.exec(`ALTER TABLE photos ADD COLUMN width INTEGER`);
   if (!cols.includes('height')) db.exec(`ALTER TABLE photos ADD COLUMN height INTEGER`);
-  if (!cols.includes('expected_size')) db.exec(`ALTER TABLE photos ADD COLUMN expected_size INTEGER`);
 }
 
 export function upsertPhoto(
@@ -71,21 +69,19 @@ export function upsertPhoto(
   creationTime: string | null,
   width: number | null = null,
   height: number | null = null,
-  expectedSize: number | null = null,
 ): void {
   const db = getDb();
   db.prepare(
     `
-    INSERT INTO photos (media_item_id, google_url, creation_time, width, height, expected_size)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO photos (media_item_id, google_url, creation_time, width, height)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT (media_item_id) DO UPDATE SET
       google_url = excluded.google_url,
       creation_time = excluded.creation_time,
       width = excluded.width,
-      height = excluded.height,
-      expected_size = excluded.expected_size
+      height = excluded.height
   `,
-  ).run(mediaItemId, googleUrl, creationTime, width, height, expectedSize);
+  ).run(mediaItemId, googleUrl, creationTime, width, height);
 }
 
 export function markDownloaded(mediaItemId: string, destPath: string, filename: string, companionPath?: string): void {

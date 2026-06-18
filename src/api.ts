@@ -6,7 +6,6 @@ export interface MediaItem {
   creationTime: number | null; // Unix ms timestamp
   width: number | null;
   height: number | null;
-  expectedSize: number | null;
 }
 
 interface BatchParams {
@@ -159,7 +158,6 @@ export async function* enumerateAllMediaItems(
         creationTime: creationTime ?? null,
         width: meta ? ((meta[1] as number | null) ?? null) : null,
         height: meta ? ((meta[2] as number | null) ?? null) : null,
-        expectedSize: meta && Array.isArray(meta[9]) ? ((meta[9] as number[])[0] ?? null) : null,
       };
     }
 
