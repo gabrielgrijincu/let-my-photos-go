@@ -9,11 +9,13 @@ import { upsertPhoto, getStats } from '../db.js';
 export const enumerateCommand = new Command('enumerate')
   .description('Scan Google Photos and populate the local database with photo metadata')
   .option('-l, --limit <n>', 'Stop after this many photos (for testing)', parseInt)
-  .action(async (options: { limit?: number }) => {
+  .action(async (options: { limit?: number }, cmd: Command) => {
+    const profile: string | undefined = cmd.parent?.opts()?.profile;
+    const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Enumerate');
 
     if (!fs.existsSync(getAuthPath())) {
-      clack.log.error('No browser session found. Run `lmpg auth` first.');
+      clack.log.error(`No browser session found. Run \`${lmpg('auth')}\` first.`);
       process.exit(1);
     }
 
@@ -48,5 +50,5 @@ export const enumerateCommand = new Command('enumerate')
     await saveSession(context);
     await browser.close();
 
-    clack.outro('Done. Run `lmpg flee` to download.');
+    clack.outro(`Done. Run \`${lmpg('flee')}\` to download your photos.`);
   });

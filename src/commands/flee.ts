@@ -89,24 +89,29 @@ export const fleeCommand = new Command('flee')
   .option('-c, --concurrency <n>', 'Number of parallel downloads', parseInt)
   .option('--inspect', 'Open a visible browser with DevTools for each download (for debugging)')
   .action(
-    async (options: {
-      failedOnly?: boolean;
-      year?: string;
-      from?: string;
-      to?: string;
-      limit?: number;
-      concurrency?: number;
-      inspect?: boolean;
-    }) => {
+    async (
+      options: {
+        failedOnly?: boolean;
+        year?: string;
+        from?: string;
+        to?: string;
+        limit?: number;
+        concurrency?: number;
+        inspect?: boolean;
+      },
+      cmd: Command,
+    ) => {
+      const profile: string | undefined = cmd.parent?.opts()?.profile;
+      const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
       clack.intro('🕊️  Let My Photos Go — Flee!');
 
       const config = readConfig();
       if (!config) {
-        clack.log.error('No config found. Run `lmpg config` first.');
+        clack.log.error(`No config found. Run \`${lmpg('config')}\` first.`);
         process.exit(1);
       }
       if (!fs.existsSync(getAuthPath())) {
-        clack.log.error('No browser session found. Run `lmpg auth` first.');
+        clack.log.error(`No browser session found. Run \`${lmpg('auth')}\` first.`);
         process.exit(1);
       }
 
@@ -129,7 +134,7 @@ export const fleeCommand = new Command('flee')
       fs.mkdirSync(outputDir, { recursive: true });
 
       if (!hasAnyPhotos()) {
-        clack.log.error('No photos in database. Run `lmpg enumerate` first.');
+        clack.log.error(`No photos in database. Run \`${lmpg('enumerate')}\` first.`);
         process.exit(1);
       }
 
@@ -248,7 +253,7 @@ export const fleeCommand = new Command('flee')
             if (!page.url().startsWith('https://photos.google.com/')) {
               if (!sessionExpired) {
                 sessionExpired = true;
-                clack.log.error('Session expired — run `lmpg auth` to sign in again.');
+                clack.log.error(`Session expired — run \`${lmpg('auth')}\` to sign in again.`);
               }
               return;
             }
@@ -378,9 +383,9 @@ export const fleeCommand = new Command('flee')
 
       for (let chunkStart = 0; chunkStart < pending.length; chunkStart += BROWSER_RESTART_EVERY) {
         if (chunkStart > 0) {
+          downloadSpinner.message(`[${prevDownloaded + downloaded + failed}/${grandTotal}] Restarting browser to free memory…`);
           await saveSession(context);
           await browser.close();
-          clack.log.info(`[${prevDownloaded + downloaded + failed}/${grandTotal}] Restarting browser to free memory…`);
           ({ browser, context } = await launchHeadlessBrowser({ inspect: options.inspect }));
         }
         await runWithConcurrency(pending.slice(chunkStart, chunkStart + BROWSER_RESTART_EVERY), concurrency, worker);
@@ -398,19 +403,19 @@ export const fleeCommand = new Command('flee')
 
       if (sessionExpired) {
         downloadSpinner.stop(`Stopped at [${prevDownloaded + downloaded + failed}/${grandTotal}].`);
-        clack.outro('Session expired. Run `lmpg auth`, then `lmpg flee` to continue.');
+        clack.outro(`Session expired. Run \`${lmpg('auth')}\`, then \`${lmpg('flee')}\` to continue.`);
         return;
       }
 
       if (shuttingDown) {
         downloadSpinner.stop(`Paused at [${prevDownloaded + downloaded + failed}/${grandTotal}].`);
-        clack.outro('Run `lmpg flee` to continue.');
+        clack.outro(`Run \`${lmpg('flee')}\` to continue.`);
         return;
       }
 
       downloadSpinner.stop(
         `Downloaded ${downloaded} photos.${failed > 0 ? ` ${failed} failed (run again to retry).` : ' 🎉'}`,
       );
-      clack.outro('');
+      clack.outro(failed > 0 ? `Run \`${lmpg('flee')}\` to retry failed downloads.` : `Run \`${lmpg('verify')}\` to check your downloads.`);
     },
   );

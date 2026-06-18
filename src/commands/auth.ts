@@ -3,10 +3,13 @@ import * as fs from 'fs';
 import * as clack from '@clack/prompts';
 import { launchHeadedBrowser, saveSession } from '../browser.js';
 import { ensureDataDir, getAuthPath } from '../paths.js';
+import { readConfig } from '../config.js';
 
 export const authCommand = new Command('auth')
   .description('Log in to Google Photos (saves browser session for downloads)')
-  .action(async () => {
+  .action(async (_: Record<string, never>, cmd: Command) => {
+    const profile: string | undefined = cmd.parent?.opts()?.profile;
+    const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Auth');
 
     ensureDataDir();
@@ -47,5 +50,10 @@ export const authCommand = new Command('auth')
 
     await browser.close();
 
-    clack.outro('Logged in! Run `lmpg config` to configure your download settings.');
+    const configExists = !!readConfig();
+    clack.outro(
+      configExists
+        ? `Logged in! Run \`${lmpg('enumerate')}\` to scan your library.`
+        : `Logged in! Run \`${lmpg('config')}\` to configure your download settings, then \`${lmpg('enumerate')}\` to scan your library.`,
+    );
   });
