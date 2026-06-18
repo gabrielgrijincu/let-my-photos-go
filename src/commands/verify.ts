@@ -126,6 +126,7 @@ export const verifyCommand = new Command('verify')
     const issues: Issue[] = [];
     let checked = 0;
     const pendingBackfills: Array<{ mediaItemId: string; companionPath: string }> = [];
+    const pendingVerifies: string[] = [];
 
     const db = getDb();
     for (const record of db
@@ -196,7 +197,7 @@ export const verifyCommand = new Command('verify')
       }
 
       if (issues.length === issuesBefore) {
-        markVerified(record.media_item_id);
+        pendingVerifies.push(record.media_item_id);
       }
     }
 
@@ -205,9 +206,12 @@ export const verifyCommand = new Command('verify')
       process.stdin.pause();
     }
 
-    // Apply backfills after the iterator is closed (can't write while iterating)
+    // Apply writes after the iterator is closed (can't write while iterating)
     for (const { mediaItemId, companionPath } of pendingBackfills) {
       setCompanionPath(mediaItemId, companionPath);
+    }
+    for (const mediaItemId of pendingVerifies) {
+      markVerified(mediaItemId);
     }
 
     spinner.stop(
