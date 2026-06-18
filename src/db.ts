@@ -82,6 +82,15 @@ export function markFailed(mediaItemId: string): void {
   db.prepare(`UPDATE photos SET status = 'failed' WHERE media_item_id = ?`).run(mediaItemId);
 }
 
+export function resetToPending(mediaItemId: string): void {
+  const db = getDb();
+  db.prepare(`
+    UPDATE photos
+    SET status = 'pending', dest_path = NULL, downloaded_at = NULL, filename = ''
+    WHERE media_item_id = ?
+  `).run(mediaItemId);
+}
+
 export function getDestPathOwner(destPath: string): string | null {
   const db = getDb();
   const row = db.prepare(`SELECT media_item_id FROM photos WHERE dest_path = ?`).get(destPath) as { media_item_id: string } | undefined;

@@ -4,6 +4,7 @@ import { configCommand } from './commands/config.js';
 import { authCommand } from './commands/auth.js';
 import { fleeCommand } from './commands/flee.js';
 import { statusCommand } from './commands/status.js';
+import { verifyCommand } from './commands/verify.js';
 
 const program = new Command();
 
@@ -16,5 +17,6 @@ program.addCommand(authCommand);
 program.addCommand(configCommand);
 program.addCommand(fleeCommand);
 program.addCommand(statusCommand);
+program.addCommand(verifyCommand);
 
 program.parse(process.argv);

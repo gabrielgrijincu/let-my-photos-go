@@ -280,25 +280,34 @@ export const fleeCommand = new Command('flee')
           let actualFilename = filename;
 
           if (filename.toLowerCase().endsWith('.zip')) {
-            const zip = new AdmZip(destPath);
-            const stillEntry = zip.getEntries().find(e => /\.(heic|jpg|jpeg|png)$/i.test(e.entryName));
+            const extractedPaths: string[] = [];
+            try {
+              const zip = new AdmZip(destPath);
+              const stillEntry = zip.getEntries().find(e => /\.(heic|jpg|jpeg|png)$/i.test(e.entryName));
 
-            if (stillEntry) {
-              const resolvedStillPath = resolveDestPath(outputDir, photo, stillEntry.entryName);
-              const resolvedBase = resolvedStillPath.replace(/\.[^.]+$/, '');
+              if (stillEntry) {
+                const resolvedStillPath = resolveDestPath(outputDir, photo, stillEntry.entryName);
+                const resolvedBase = resolvedStillPath.replace(/\.[^.]+$/, '');
 
-              for (const entry of zip.getEntries()) {
-                const ext = path.extname(entry.entryName);
-                const outPath = resolvedBase + ext;
-                fs.writeFileSync(outPath, entry.getData());
-                await applyTimestamps(outPath);
+                for (const entry of zip.getEntries()) {
+                  const ext = path.extname(entry.entryName);
+                  const outPath = resolvedBase + ext;
+                  fs.writeFileSync(outPath, entry.getData());
+                  extractedPaths.push(outPath);
+                  await applyTimestamps(outPath);
+                }
+
+                actualFilename = path.basename(resolvedStillPath);
+                actualDestPath = resolvedStillPath;
               }
-
-              actualFilename = path.basename(resolvedStillPath);
-              actualDestPath = resolvedStillPath;
+            } catch (zipErr) {
+              for (const p of extractedPaths) {
+                try { fs.unlinkSync(p); } catch { /* ignore */ }
+              }
+              throw zipErr;
+            } finally {
+              try { fs.unlinkSync(destPath); } catch { /* ignore */ }
             }
-
-            fs.unlinkSync(destPath);
           } else {
             await applyTimestamps(destPath);
           }
