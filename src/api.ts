@@ -24,7 +24,8 @@ export interface Album {
 
 export interface PhotoSample {
   mediaItemId: string;
-  uploaderId: string | null; // uploader auth token from snAcKc photo[6][0]
+  uploaderToken: string | null; // uploader auth token from snAcKc photo[6][0]
+  creationTime: number | null;  // ms timestamp from snAcKc photo[2]
 }
 
 export interface BatchParams {
@@ -305,9 +306,10 @@ export async function fetchAlbumPhotoSamples(
     for (const photo of photos) {
       const p = photo as unknown[];
       const mediaItemId = p[0] as string;
+      const creationTime = (p[2] as number | null) ?? null;
       const uploaderArr = Array.isArray(p[6]) ? (p[6] as unknown[]) : null;
-      const uploaderId = uploaderArr ? (uploaderArr[0] as string | null) : null;
-      samples.push({ mediaItemId, uploaderId });
+      const uploaderToken = uploaderArr ? (uploaderArr[0] as string | null) : null;
+      samples.push({ mediaItemId, uploaderToken, creationTime });
     }
 
     if (!nextToken || photos.length === 0) break;

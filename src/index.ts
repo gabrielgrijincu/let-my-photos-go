@@ -6,6 +6,7 @@ import { enumerateAlbumsCommand } from './commands/enumerate-albums.js';
 import { enumerateCommand } from './commands/enumerate.js';
 import { fleeCommand } from './commands/flee.js';
 import { statusCommand } from './commands/status.js';
+import { organizeCommand } from './commands/organize.js';
 import { verifyCommand } from './commands/verify.js';
 import { setProfile } from './paths.js';
 
@@ -22,10 +23,11 @@ program
 
 program.addCommand(authCommand);
 program.addCommand(configCommand);
-program.addCommand(enumerateAlbumsCommand);
 program.addCommand(enumerateCommand);
+program.addCommand(enumerateAlbumsCommand);
 program.addCommand(fleeCommand);
 program.addCommand(statusCommand);
 program.addCommand(verifyCommand);
+program.addCommand(organizeCommand);
 
 program.parse(process.argv);

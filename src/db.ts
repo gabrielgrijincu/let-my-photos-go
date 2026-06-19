@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { getDbPath } from './paths.js';
 
 export type PhotoStatus = 'pending' | 'downloaded' | 'failed';
+export type PhotoSource = 'timeline' | 'album';
 
 export interface PhotoRecord {
   media_item_id: string;
@@ -63,6 +64,25 @@ function migrate(db: Database.Database): void {
   if (!cols.includes('width')) db.exec(`ALTER TABLE photos ADD COLUMN width INTEGER`);
   if (!cols.includes('height')) db.exec(`ALTER TABLE photos ADD COLUMN height INTEGER`);
   if (!cols.includes('verified_at')) db.exec(`ALTER TABLE photos ADD COLUMN verified_at TEXT`);
+  if (!cols.includes('source')) db.exec(`ALTER TABLE photos ADD COLUMN source TEXT NOT NULL DEFAULT 'timeline'`);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS albums (
+      album_id      TEXT PRIMARY KEY,
+      title         TEXT NOT NULL,
+      photo_count   INTEGER NOT NULL DEFAULT 0,
+      enumerated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS album_photos (
+      album_id        TEXT NOT NULL,
+      media_item_id   TEXT NOT NULL,
+      uploader_token  TEXT,
+      PRIMARY KEY (album_id, media_item_id)
+    )
+  `);
 }
 
 export function upsertPhoto(
@@ -158,6 +178,95 @@ export function getPendingPhotos(filter: PhotoFilter = {}): PhotoRecord[] {
   }
 
   return db.prepare(sql).all(...params) as PhotoRecord[];
+}
+
+export function upsertAlbum(albumId: string, title: string, photoCount: number): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO albums (album_id, title, photo_count, enumerated_at)
+     VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT (album_id) DO UPDATE SET title = excluded.title, photo_count = excluded.photo_count, enumerated_at = excluded.enumerated_at`,
+  ).run(albumId, title, photoCount);
+}
+
+export function upsertAlbumPhotos(
+  albumId: string,
+  samples: { mediaItemId: string; uploaderToken: string | null }[],
+): void {
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare(`DELETE FROM album_photos WHERE album_id = ?`).run(albumId);
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO album_photos (album_id, media_item_id, uploader_token) VALUES (?, ?, ?)`,
+    );
+    for (const s of samples) insert.run(albumId, s.mediaItemId, s.uploaderToken);
+  })();
+}
+
+export function upsertAlbumPhoto(
+  mediaItemId: string,
+  googleUrl: string,
+  creationTime: string | null,
+): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO photos (media_item_id, google_url, creation_time, source)
+     VALUES (?, ?, ?, 'album')
+     ON CONFLICT (media_item_id) DO UPDATE SET
+       google_url = excluded.google_url
+     WHERE photos.status IN ('pending', 'failed')`,
+  ).run(mediaItemId, googleUrl, creationTime);
+}
+
+export function deletePendingAlbumPhotos(): void {
+  const db = getDb();
+  db.prepare(`DELETE FROM photos WHERE source = 'album' AND status = 'pending'`).run();
+}
+
+export function getTimelinePhotoIds(): Set<string> {
+  const db = getDb();
+  const rows = db.prepare(`SELECT media_item_id FROM photos WHERE source = 'timeline'`).all() as { media_item_id: string }[];
+  return new Set(rows.map(r => r.media_item_id));
+}
+
+export interface OrganizePhoto {
+  mediaItemId: string;
+  destPath: string;
+  filename: string;
+}
+
+export interface OrganizeAlbum {
+  albumId: string;
+  title: string;
+  totalInAlbum: number;
+  photos: OrganizePhoto[];
+}
+
+export function getOrganizeData(): OrganizeAlbum[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT a.album_id, a.title,
+           COUNT(*) OVER (PARTITION BY a.album_id) AS total_in_album,
+           p.media_item_id, p.dest_path, p.filename
+    FROM albums a
+    JOIN album_photos ap ON ap.album_id = a.album_id
+    LEFT JOIN photos p ON p.media_item_id = ap.media_item_id
+    ORDER BY a.title, p.creation_time
+  `).all() as {
+    album_id: string; title: string; total_in_album: number;
+    media_item_id: string | null; dest_path: string | null; filename: string | null;
+  }[];
+
+  const map = new Map<string, OrganizeAlbum>();
+  for (const row of rows) {
+    if (!map.has(row.album_id)) {
+      map.set(row.album_id, { albumId: row.album_id, title: row.title, totalInAlbum: row.total_in_album, photos: [] });
+    }
+    if (row.dest_path && row.filename && row.media_item_id) {
+      map.get(row.album_id)!.photos.push({ mediaItemId: row.media_item_id, destPath: row.dest_path, filename: row.filename });
+    }
+  }
+  return [...map.values()];
 }
 
 export function getStats(): { total: number; downloaded: number; failed: number; pending: number } {
