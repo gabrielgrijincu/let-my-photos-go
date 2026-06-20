@@ -8,6 +8,7 @@ import { launchHeadlessBrowser, saveSession } from '../browser.js';
 import { getAuthPath } from '../paths.js';
 import { markDownloaded, markFailed, getPendingPhotos, hasAnyPhotos, getDestPathOwner, getStats } from '../db.js';
 import { readConfig } from '../config.js';
+import { runWithConcurrency } from '../util.js';
 import type { PhotoRecord, PhotoFilter } from '../db.js';
 
 // --- helpers ---
@@ -50,20 +51,6 @@ function parseDateArg(value: string, endOfDay = false): Date {
   return date;
 }
 
-async function runWithConcurrency<T>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T) => Promise<void>,
-): Promise<void> {
-  let i = 0;
-  async function next(): Promise<void> {
-    while (i < items.length) {
-      const item = items[i++];
-      await worker(item);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, next));
-}
 
 async function probeNetwork(): Promise<boolean> {
   try {

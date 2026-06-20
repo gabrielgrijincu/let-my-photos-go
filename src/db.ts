@@ -258,7 +258,7 @@ export function getOrganizeData(): OrganizeAlbum[] {
     FROM albums a
     JOIN album_photos ap ON ap.album_id = a.album_id
     LEFT JOIN photos p ON p.media_item_id = ap.media_item_id
-    ORDER BY a.title, p.creation_time
+    ORDER BY a.title, p.creation_time, p.media_item_id
   `).all() as {
     album_id: string; title: string; total_in_album: number;
     media_item_id: string | null; dest_path: string | null; filename: string | null;

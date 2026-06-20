@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { readConfig } from '../config.js';
 import { getOrganizeData } from '../db.js';
+import { runWithConcurrency } from '../util.js';
 
 function sanitizeTitle(title: string): string {
   return title.replace(/[/\\:*?"<>|]/g, '-').trim();
@@ -42,7 +43,10 @@ export const organizeCommand = new Command('organize')
     let notDownloaded = 0;
     const failedAlbums: { title: string; error: string }[] = [];
 
-    for (const album of albums) {
+    const totalPhotos = albums.reduce((sum, a) => sum + a.photos.length, 0);
+    let processedPhotos = 0;
+
+    await runWithConcurrency(albums, 20, async (album) => {
       const safeTitle = sanitizeTitle(album.title);
       const albumDir = path.join(outputDir, 'Albums', safeTitle);
       await fs.mkdir(albumDir, { recursive: true });
@@ -103,10 +107,12 @@ export const organizeCommand = new Command('organize')
         }
       }
 
+      processedPhotos += album.photos.length;
       if (!albumFailed) {
-        spinner.message(`Organizing… ${album.title}`);
+        const pct = totalPhotos > 0 ? Math.round(processedPhotos / totalPhotos * 100) : 100;
+        spinner.message(`Organizing… ${pct}% ${album.title}`);
       }
-    }
+    });
 
     spinner.stop('Done.');
 
