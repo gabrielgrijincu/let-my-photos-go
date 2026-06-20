@@ -264,6 +264,7 @@ export const fleeCommand = new Command('flee')
             const filename = download.suggestedFilename() || `${photo.media_item_id}.jpg`;
             const destPath = resolveDestPath(outputDir, photo, filename);
             await download.saveAs(destPath);
+            await download.delete();
 
             const tsMs = photo.creation_time ? new Date(photo.creation_time).getTime() : Date.now();
             const applyTimestamps = (p: string) => utimes(p, { btime: tsMs, mtime: tsMs, atime: tsMs });

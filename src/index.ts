@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+
+process.title = ['lmpg', ...process.argv.slice(2)].join(' ');
+
 import { Command } from 'commander';
 import { configCommand } from './commands/config.js';
 import { authCommand } from './commands/auth.js';
