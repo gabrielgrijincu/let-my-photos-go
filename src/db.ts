@@ -122,6 +122,11 @@ export function markFailed(mediaItemId: string): void {
   db.prepare(`UPDATE photos SET status = 'failed' WHERE media_item_id = ?`).run(mediaItemId);
 }
 
+export function clearAllVerified(): number {
+  const db = getDb();
+  return (db.prepare(`UPDATE photos SET verified_at = NULL WHERE verified_at IS NOT NULL`).run() as { changes: number }).changes;
+}
+
 export function markVerified(mediaItemId: string): void {
   const db = getDb();
   db.prepare(`UPDATE photos SET verified_at = datetime('now') WHERE media_item_id = ?`).run(mediaItemId);

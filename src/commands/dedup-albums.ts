@@ -58,10 +58,11 @@ export const dedupAlbumsCommand = new Command('dedup-albums')
         t.companion_path AS t_companion
       FROM photos a
       JOIN photos t
-        ON  t.creation_time = a.creation_time
-        AND t.source        = 'timeline'
-        AND t.status        = 'downloaded'
-        AND t.dest_path     IS NOT NULL
+        ON  t.creation_time       = a.creation_time
+        AND LOWER(t.filename)    = LOWER(a.filename)
+        AND t.source             = 'timeline'
+        AND t.status             = 'downloaded'
+        AND t.dest_path          IS NOT NULL
       WHERE a.source    = 'album'
         AND a.status    = 'downloaded'
         AND a.dest_path IS NOT NULL
@@ -104,20 +105,25 @@ export const dedupAlbumsCommand = new Command('dedup-albums')
         skipped++;
       } else {
         try {
-          const [albumHash, timelineHash] = await Promise.all([sha256(albumAbs), sha256(timelineAbs)]);
-
-          if (albumHash !== timelineHash) {
+          const albumSize = fs.statSync(albumAbs).size;
+          const timelineSize = fs.statSync(timelineAbs).size;
+          if (albumSize !== timelineSize) {
             mismatch++;
           } else {
-            matched++;
-            if (!opts.fix) {
-              clack.log.info(`WOULD DELETE  ${pair.dest_path}  (kept: ${pair.t_dest})`);
+            const [albumHash, timelineHash] = await Promise.all([sha256(albumAbs), sha256(timelineAbs)]);
+            if (albumHash !== timelineHash) {
+              mismatch++;
             } else {
-              fs.unlinkSync(albumAbs);
-              if (pair.companion_path) {
-                try { fs.unlinkSync(path.resolve(outputDir, pair.companion_path)); } catch { /* best effort */ }
+              matched++;
+              if (!opts.fix) {
+                clack.log.info(`WOULD DELETE  ${pair.dest_path}  (kept: ${pair.t_dest})`);
+              } else {
+                fs.unlinkSync(albumAbs);
+                if (pair.companion_path) {
+                  try { fs.unlinkSync(path.resolve(outputDir, pair.companion_path)); } catch { /* best effort */ }
+                }
+                updateStmt.run(pair.t_dest, pair.t_filename, pair.t_companion ?? null, pair.media_item_id);
               }
-              updateStmt.run(pair.t_dest, pair.t_filename, pair.t_companion ?? null, pair.media_item_id);
             }
           }
         } catch (err) {

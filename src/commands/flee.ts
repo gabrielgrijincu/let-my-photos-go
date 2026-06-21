@@ -141,7 +141,8 @@ export const fleeCommand = new Command('flee')
       const pending = getPendingPhotos(filter);
 
       if (pending.length === 0) {
-        clack.log.success('All photos are already downloaded!');
+        const { downloaded } = getStats();
+        clack.log.success(`All ${downloaded.toLocaleString()} photos are already downloaded!`);
         await browser.close();
         clack.outro('Nothing left to do. 🎉');
         return;

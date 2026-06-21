@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import * as clack from '@clack/prompts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { getDb, markVerified, resetToPending, setCompanionPath } from '../db.js';
+import { getDb, markVerified, resetToPending, setCompanionPath, clearAllVerified } from '../db.js';
 import type { PhotoRecord } from '../db.js';
 import { readConfig } from '../config.js';
 import { runWithConcurrency } from '../util.js';
@@ -78,7 +78,8 @@ async function checkMagicBytes(filePath: string): Promise<boolean> {
 export const verifyCommand = new Command('verify')
   .description('Check unverified downloaded photos exist on disk and are non-empty')
   .option('--fix', 'Reset records with issues to pending for re-download')
-  .action(async (opts: { fix?: boolean }, cmd: Command) => {
+  .option('--reset', 'Clear all verified_at timestamps so every downloaded photo is re-checked')
+  .action(async (opts: { fix?: boolean; reset?: boolean }, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Verify');
@@ -89,6 +90,12 @@ export const verifyCommand = new Command('verify')
     let total: number;
     try {
       const db = getDb();
+
+      if (opts.reset) {
+        const cleared = clearAllVerified();
+        clack.log.info(`Reset verification status for ${cleared.toLocaleString()} photo(s).`);
+      }
+
       const downloaded = (
         db.prepare(`SELECT COUNT(*) as count FROM photos WHERE status = 'downloaded'`).get() as { count: number }
       ).count;

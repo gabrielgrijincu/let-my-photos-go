@@ -156,6 +156,59 @@ By default, `verify` only reports issues. Add `--fix` to reset broken records to
 lmpg verify --fix   # reset broken records for re-download
 ```
 
+### Optional: Enumerate albums (`lmpg enumerate-albums`)
+
+```bash
+lmpg enumerate-albums
+```
+
+Scans your Google Photos albums and saves album membership to the database. Required before running `organize`. Safe to re-run — adds new albums and photos without touching download state.
+
+### Optional: Organise by album (`lmpg organize`)
+
+```bash
+lmpg organize
+```
+
+Creates an `Albums/` folder inside your output directory. Each album gets a subfolder containing **symbolic links** to the already-downloaded photos — no files are duplicated on disk.
+
+```
+~/Pictures/let-my-photos-go/
+  Albums/
+    Egypt 2021/
+      IMG_0089.heic -> ../../2021/03/IMG_0089.heic
+      IMG_0092.mov  -> ../../2021/03/IMG_0092.mov
+    Family/
+      ...
+  2021/
+    03/  IMG_0089.heic
+         IMG_0092.mov
+```
+
+Run `enumerate-albums` first, then `flee` (to download photos), then `organize`. Re-running `organize` is safe — it skips existing correct symlinks and fixes any that point to the wrong file.
+
+### Optional: Deduplicate album photos (`lmpg dedup-albums`)
+
+```bash
+lmpg dedup-albums         # dry run — shows what would be removed
+lmpg dedup-albums --fix   # apply
+```
+
+When you save someone else's photo from a shared album to your library, Google Photos creates a second copy with a different ID. After downloading, you end up with the same file on disk twice — once as a timeline photo, once as an album photo.
+
+`dedup-albums` finds these pairs (matched by creation time, filename, and a full SHA-256 hash to confirm byte-identical content), deletes the album-source copy, and redirects the album record to point at the timeline file. After running it, `organize` correctly symlinks album folders to the single on-disk copy.
+
+### Optional: Remove album-only photos (`lmpg reset-albums`)
+
+```bash
+lmpg reset-albums         # dry run — shows what would be removed
+lmpg reset-albums --fix   # apply
+```
+
+Deletes downloaded album-source photos that have **no counterpart in your main timeline** — i.e. photos you saw in a shared album but never saved to your own library. Both the files on disk and the database records are removed entirely; `flee` will never attempt to re-download them.
+
+Run this **after** `dedup-albums --fix`, so that saved copies (which now share a `dest_path` with their timeline counterpart) are correctly preserved.
+
 ---
 
 ## Profiles
@@ -237,6 +290,7 @@ If `lmpg enumerate` reports more items than `lmpg status` shows as the database 
 | `lmpg config`                         |       | Set output directory                                     |
 | `lmpg enumerate`                      |       | Scan library and populate database                       |
 | `lmpg enumerate --limit <n>`          | `-l`  | Stop after n items (testing)                             |
+| `lmpg enumerate-albums`               |       | Scan albums and save membership to database              |
 | `lmpg flee`                           |       | Download all pending photos                              |
 | `lmpg flee --failed-only`             | `-f`  | Only retry previously failed photos                      |
 | `lmpg flee --year <year>`             | `-y`  | Filter by year                                           |
@@ -247,6 +301,11 @@ If `lmpg enumerate` reports more items than `lmpg status` shows as the database 
 | `lmpg status`                         |       | Show download progress                                   |
 | `lmpg verify`                         |       | Check unverified downloaded files and report issues      |
 | `lmpg verify --fix`                   |       | Also reset broken records to pending for re-download     |
+| `lmpg organize`                       |       | Create `Albums/` symlink tree from downloaded photos     |
+| `lmpg dedup-albums`                   |       | Dry-run: find album files byte-identical to timeline     |
+| `lmpg dedup-albums --fix`             |       | Delete album duplicates and redirect DB records          |
+| `lmpg reset-albums`                   |       | Dry-run: find album-only files with no timeline copy     |
+| `lmpg reset-albums --fix`             |       | Delete album-only files and remove their DB records      |
 | `lmpg -p <name> <command>`            | `-p`  | Use a named profile (separate auth, DB, and config)      |
 | `lmpg -v`                             |       | Print version                                            |
 

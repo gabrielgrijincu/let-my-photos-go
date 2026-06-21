@@ -12,6 +12,8 @@ import { statusCommand } from './commands/status.js';
 import { organizeCommand } from './commands/organize.js';
 import { verifyCommand } from './commands/verify.js';
 import { dedupAlbumsCommand } from './commands/dedup-albums.js';
+import { resetAlbumsCommand } from './commands/reset-albums.js';
+import { scrubCommand } from './commands/scrub.js';
 import { setProfile } from './paths.js';
 
 const program = new Command();
@@ -34,5 +36,7 @@ program.addCommand(statusCommand);
 program.addCommand(verifyCommand);
 program.addCommand(organizeCommand);
 program.addCommand(dedupAlbumsCommand);
+program.addCommand(resetAlbumsCommand);
+program.addCommand(scrubCommand);
 
 program.parse(process.argv);
