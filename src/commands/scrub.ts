@@ -18,9 +18,9 @@ async function walk(dir: string, entries: string[]): Promise<void> {
 }
 
 export const scrubCommand = new Command('scrub')
-  .description('Find files on disk that have no matching record in the database')
-  .option('--fix', 'Delete orphaned files (default: dry run)')
-  .action(async (opts: { fix?: boolean }, cmd: Command) => {
+  .description('Find and delete files on disk that have no matching record in the database')
+  .option('--dry-run', 'Preview what would be deleted without making any changes')
+  .action(async (opts: { dryRun?: boolean }, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Scrub');
@@ -32,8 +32,8 @@ export const scrubCommand = new Command('scrub')
     }
     const outputDir = config.outputDir;
 
-    if (!opts.fix) {
-      clack.log.info('Dry run — pass --fix to actually delete orphaned files.');
+    if (opts.dryRun) {
+      clack.log.info('Dry run — no files will be deleted.');
     }
 
     const spinner = clack.spinner();
@@ -46,9 +46,10 @@ export const scrubCommand = new Command('scrub')
     `).all() as { dest_path: string; companion_path: string | null }[];
 
     const known = new Set<string>();
+    let companionCount = 0;
     for (const row of rows) {
       known.add(row.dest_path);
-      if (row.companion_path) known.add(row.companion_path);
+      if (row.companion_path) { known.add(row.companion_path); companionCount++; }
     }
 
     spinner.message('Scanning files on disk…');
@@ -70,7 +71,9 @@ export const scrubCommand = new Command('scrub')
       process.exit(1);
     }
 
-    spinner.stop(`Scanned ${allFiles.length.toLocaleString()} files, ${known.size.toLocaleString()} known paths in DB.`);
+    spinner.stop(
+      `Scanned ${allFiles.length.toLocaleString()} files on disk — DB knows ${rows.length.toLocaleString()} photos + ${companionCount.toLocaleString()} Live Photo companions.`,
+    );
 
     const orphans = allFiles.filter(f => !known.has(path.relative(outputDir, f)));
 
@@ -85,21 +88,39 @@ export const scrubCommand = new Command('scrub')
       clack.log.warn(`  ${path.relative(outputDir, f)}`);
     }
 
-    if (opts.fix) {
+    if (!opts.dryRun) {
       let deleted = 0;
       let errors = 0;
+      const dirs = new Set<string>();
       for (const f of orphans) {
         try {
           await fs.unlink(f);
           deleted++;
+          dirs.add(path.dirname(f));
         } catch (err) {
           clack.log.error(`ERROR  ${path.relative(outputDir, f)}: ${(err as Error).message}`);
           errors++;
         }
       }
-      clack.log.success(`Deleted ${deleted} orphaned file(s)${errors > 0 ? `, ${errors} error(s)` : ''}.`);
+
+      // Remove empty directories, deepest first
+      const sortedDirs = [...dirs].sort((a, b) => b.split(path.sep).length - a.split(path.sep).length);
+      let removedDirs = 0;
+      for (const dir of sortedDirs) {
+        if (dir === outputDir) continue;
+        try {
+          await fs.rmdir(dir);
+          removedDirs++;
+        } catch {
+          // not empty or already gone — fine
+        }
+      }
+
+      clack.log.success(
+        `Deleted ${deleted} orphaned file(s)${removedDirs > 0 ? `, removed ${removedDirs} empty folder(s)` : ''}${errors > 0 ? `, ${errors} error(s)` : ''}.`,
+      );
     } else {
-      clack.log.info(`Re-run with --fix to delete them.`);
+      clack.log.info(`Re-run without --dry-run to delete them.`);
     }
 
     clack.outro('Done.');
