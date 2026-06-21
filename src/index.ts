@@ -11,6 +11,7 @@ import { fleeCommand } from './commands/flee.js';
 import { statusCommand } from './commands/status.js';
 import { organizeCommand } from './commands/organize.js';
 import { verifyCommand } from './commands/verify.js';
+import { dedupAlbumsCommand } from './commands/dedup-albums.js';
 import { setProfile } from './paths.js';
 
 const program = new Command();
@@ -32,5 +33,6 @@ program.addCommand(fleeCommand);
 program.addCommand(statusCommand);
 program.addCommand(verifyCommand);
 program.addCommand(organizeCommand);
+program.addCommand(dedupAlbumsCommand);
 
 program.parse(process.argv);
