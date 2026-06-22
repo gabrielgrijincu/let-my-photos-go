@@ -10,18 +10,13 @@ import {
   upsertAlbumPhotos,
   upsertAlbumPhoto,
   ensurePhotoRecord,
-  deletePendingAlbumPhotos,
-  getTimelinePhotoIds,
 } from '../db.js';
-
-type OwnerFlag = 'owned' | 'foreign-saved' | 'all';
 
 export const enumerateAlbumsCommand = new Command('enumerate-albums')
   .description('Scan all albums and persist membership to the database')
   .option('--owned', 'only include photos you uploaded (default)')
-  .option('--foreign-saved', 'include your photos + others\' photos present in the main timeline (requires `lmpg enumerate` to have been run first)')
   .option('--all', 'include all photos; download others\' photos on next `lmpg flee`')
-  .action(async (options: { owned?: boolean; foreignSaved?: boolean; all?: boolean }, cmd: Command) => {
+  .action(async (options: { owned?: boolean; all?: boolean }, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Enumerate Albums');
@@ -31,11 +26,11 @@ export const enumerateAlbumsCommand = new Command('enumerate-albums')
       process.exit(1);
     }
 
-    const ownerFlag: OwnerFlag = options.all ? 'all' : options.foreignSaved ? 'foreign-saved' : 'owned';
+    const includeAll = !!options.all;
 
     const config = readConfig();
     const googleUserToken = config?.googleUserToken ?? null;
-    if (!googleUserToken && ownerFlag !== 'all') {
+    if (!googleUserToken && !includeAll) {
       clack.log.warn(`Google user token not found. Re-run \`${lmpg('auth')}\` to enable ownership detection.`);
     }
 
@@ -55,12 +50,6 @@ export const enumerateAlbumsCommand = new Command('enumerate-albums')
       process.exit(1);
     }
     spinner.stop('Session ready.');
-
-    // Clear pending album photos before re-populating
-    deletePendingAlbumPhotos();
-
-    // For --keep-saved: pre-fetch the set of media IDs already in the main timeline
-    const savedIds: Set<string> = ownerFlag === 'foreign-saved' ? getTimelinePhotoIds() : new Set();
 
     spinner.start('Scanning album list…');
     const albums: Album[] = [];
@@ -87,13 +76,9 @@ export const enumerateAlbumsCommand = new Command('enumerate-albums')
 
       const photos = await fetchAlbumPhotos(context, params, album);
 
-      // Filter samples based on flag
-      const filteredPhotos = photos.filter(s => {
-        if (ownerFlag === 'all') return true;
-        if (s.uploaderToken === googleUserToken) return true;
-        if (ownerFlag === 'foreign-saved') return savedIds.has(s.mediaItemId);
-        return false; // --owned
-      });
+      const filteredPhotos = photos.filter(s =>
+        includeAll || s.uploaderToken === googleUserToken,
+      );
 
       upsertAlbum(album.albumId, album.title, album.photoCount);
       upsertAlbumPhotos(album.albumId, filteredPhotos);

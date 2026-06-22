@@ -230,16 +230,6 @@ export function upsertAlbumPhoto(
   ).run(mediaItemId, googleUrl, creationTime);
 }
 
-export function deletePendingAlbumPhotos(): void {
-  const db = getDb();
-  db.prepare(`DELETE FROM photos WHERE source = 'album' AND status = 'pending'`).run();
-}
-
-export function getTimelinePhotoIds(): Set<string> {
-  const db = getDb();
-  const rows = db.prepare(`SELECT media_item_id FROM photos WHERE source = 'timeline'`).all() as { media_item_id: string }[];
-  return new Set(rows.map(r => r.media_item_id));
-}
 
 export interface OrganizePhoto {
   mediaItemId: string;
