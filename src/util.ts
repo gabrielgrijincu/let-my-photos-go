@@ -1,4 +1,20 @@
 import * as path from 'path';
+import { Command } from 'commander';
+
+export function wrapAction<O extends object>(
+  fn: (opts: O, cmd: Command) => Promise<void>,
+): (opts: O, cmd: Command) => void {
+  return (opts, cmd) => {
+    fn(opts, cmd).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`\nError: ${msg}\n`);
+      if (process.env.DEBUG && err instanceof Error && err.stack) {
+        process.stderr.write(err.stack + '\n');
+      }
+      process.exit(1);
+    });
+  };
+}
 
 export function buildFilename(date: Date | null, filename: string): string {
   const ext = path.extname(filename).toLowerCase();

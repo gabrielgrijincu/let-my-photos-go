@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import * as clack from '@clack/prompts';
+import { wrapAction } from '../util';
 import * as fs from 'fs';
 import { launchHeadlessBrowser, saveSession } from '../browser';
 import { getAuthPath } from '../paths';
@@ -11,7 +12,7 @@ export const enumerateAlbumsCommand = new Command('enumerate-albums')
   .description('Scan all albums and persist membership to the database')
   .option('--owned', 'only include photos you uploaded (default)')
   .option('--all', "include all photos; download others' photos on next `lmpg flee`")
-  .action(async (options: { owned?: boolean; all?: boolean }, cmd: Command) => {
+  .action(wrapAction(async (options: { owned?: boolean; all?: boolean }, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Enumerate Albums');
@@ -103,4 +104,4 @@ export const enumerateAlbumsCommand = new Command('enumerate-albums')
     }
 
     clack.outro(`Run \`${lmpg('flee-albums')}\` to download and organize into albums/ folders.`);
-  });
+  }));

@@ -9,7 +9,7 @@ import { getAuthPath } from '../paths';
 import { markDownloaded, markFailed, getAlbumPhotosForFlee } from '../db';
 import type { AlbumPhotoRow } from '../db';
 import { readConfig } from '../config';
-import { runWithConcurrency, buildFilename } from '../util';
+import { runWithConcurrency, buildFilename, wrapAction } from '../util';
 
 function sanitizeTitle(title: string): string {
   return title.replace(/[/\\:*?"<>|]/g, '-').trim();
@@ -72,7 +72,7 @@ export const fleeAlbumsCommand = new Command('flee-albums')
   .option('-c, --concurrency <n>', 'Number of parallel downloads within each album', parseInt)
   .option('--inspect', 'Open a visible browser with DevTools for each download (for debugging)')
   .action(
-    async (
+    wrapAction(async (
       options: {
         failedOnly?: boolean;
         limit?: number;
@@ -465,5 +465,5 @@ export const fleeAlbumsCommand = new Command('flee-albums')
           ? `${failed} failed — run \`${lmpg('flee-albums')}\` to retry.`
           : `Albums written to ${path.join(outputDir, 'albums')}`,
       );
-    },
+    }),
   );

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import * as clack from '@clack/prompts';
+import { wrapAction } from '../util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { getDb } from '../db';
@@ -20,7 +21,7 @@ async function walk(dir: string, entries: string[]): Promise<void> {
 export const scrubCommand = new Command('scrub')
   .description('Find and delete files on disk that have no matching record in the database')
   .option('--dry-run', 'Preview what would be deleted without making any changes')
-  .action(async (opts: { dryRun?: boolean }, cmd: Command) => {
+  .action(wrapAction(async (opts: { dryRun?: boolean }, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Scrub');
@@ -130,4 +131,4 @@ export const scrubCommand = new Command('scrub')
     }
 
     clack.outro('Done.');
-  });
+  }));

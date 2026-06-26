@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import * as clack from '@clack/prompts';
+import { wrapAction } from '../util';
 import * as fs from 'fs';
 import { launchHeadlessBrowser, saveSession } from '../browser';
 import { getAuthPath } from '../paths';
@@ -8,7 +9,7 @@ import { upsertPhoto, getStats } from '../db';
 
 export const enumerateCommand = new Command('enumerate')
   .description('Scan Google Photos and populate the local database with photo metadata')
-  .action(async (_options: Record<string, never>, cmd: Command) => {
+  .action(wrapAction(async (_options: Record<string, never>, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Enumerate');
@@ -49,4 +50,4 @@ export const enumerateCommand = new Command('enumerate')
     await browser.close();
 
     clack.outro(`Done. Run \`${lmpg('flee')}\` to download your photos.`);
-  });
+  }));

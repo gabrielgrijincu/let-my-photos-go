@@ -8,7 +8,7 @@ import { launchHeadlessBrowser, saveSession } from '../browser';
 import { getAuthPath } from '../paths';
 import { markDownloaded, markFailed, getPendingPhotos, hasAnyPhotos, getDestPathOwner, getStats } from '../db';
 import { readConfig } from '../config';
-import { runWithConcurrency, buildFilename } from '../util';
+import { runWithConcurrency, buildFilename, wrapAction } from '../util';
 import type { PhotoRecord, PhotoFilter } from '../db';
 
 // --- helpers ---
@@ -71,7 +71,7 @@ export const fleeCommand = new Command('flee')
   .option('-c, --concurrency <n>', 'Number of parallel downloads', parseInt)
   .option('--inspect', 'Open a visible browser with DevTools for each download (for debugging)')
   .action(
-    async (
+    wrapAction(async (
       options: {
         failedOnly?: boolean;
         limit?: number;
@@ -383,5 +383,5 @@ export const fleeCommand = new Command('flee')
           ? `Run \`${lmpg('flee')}\` to retry failed downloads.`
           : `Run \`${lmpg('verify')}\` to check your downloads.`,
       );
-    },
+    }),
   );

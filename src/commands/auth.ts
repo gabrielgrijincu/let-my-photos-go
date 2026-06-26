@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as clack from '@clack/prompts';
+import { wrapAction } from '../util';
 import type { Response } from 'playwright';
 import { launchHeadedBrowser, saveSession } from '../browser';
 import { ensureDataDir, getAuthPath, getConfigPath } from '../paths';
@@ -10,7 +11,7 @@ import { findRpcInner } from '../api';
 export const authCommand = new Command('auth')
   .description('Log in to Google Photos (saves browser session for downloads)')
   .option('--fresh', 'start with a blank browser session instead of reusing the saved one')
-  .action(async (options: { fresh?: boolean }, cmd: Command) => {
+  .action(wrapAction(async (options: { fresh?: boolean }, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Auth');
@@ -99,4 +100,4 @@ export const authCommand = new Command('auth')
         ? `Logged in! Run \`${lmpg('enumerate')}\` to scan your library.`
         : `Logged in! Run \`${lmpg('config')}\` to configure your download settings, then \`${lmpg('enumerate')}\` to scan your library.`,
     );
-  });
+  }));

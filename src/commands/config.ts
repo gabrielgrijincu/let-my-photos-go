@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import * as clack from '@clack/prompts';
+import { wrapAction } from '../util';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -10,7 +11,7 @@ const DEFAULT_OUTPUT_DIR = path.join(os.homedir(), 'Pictures', 'let-my-photos-go
 
 export const configCommand = new Command('config')
   .description('Set up output directory for downloaded photos')
-  .action(async (_: Record<string, never>, cmd: Command) => {
+  .action(wrapAction(async (_: Record<string, never>, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Config');
@@ -41,4 +42,4 @@ export const configCommand = new Command('config')
         ? `All set! Run \`${lmpg('enumerate')}\` to scan your library, then \`${lmpg('flee')}\` to download. 🎉`
         : `Next: run \`${lmpg('auth')}\` to log in to Google Photos.`,
     );
-  });
+  }));

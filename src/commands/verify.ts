@@ -5,7 +5,7 @@ import * as path from 'path';
 import { getDb, markVerified, resetToPending, setCompanionPath, clearAllVerified } from '../db';
 import type { PhotoRecord } from '../db';
 import { readConfig } from '../config';
-import { runWithConcurrency } from '../util';
+import { runWithConcurrency, wrapAction } from '../util';
 
 type IssueReason =
   | 'missing'
@@ -79,7 +79,7 @@ export const verifyCommand = new Command('verify')
   .description('Check unverified downloaded photos and reset any broken records to pending for re-download')
   .option('--dry-run', 'Report issues without resetting broken records to pending')
   .option('--reset', 'Clear all verified_at timestamps so every downloaded photo is re-checked')
-  .action(async (opts: { dryRun?: boolean; reset?: boolean }, cmd: Command) => {
+  .action(wrapAction(async (opts: { dryRun?: boolean; reset?: boolean }, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Verify');
@@ -286,4 +286,4 @@ export const verifyCommand = new Command('verify')
       clack.log.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
-  });
+  }));
