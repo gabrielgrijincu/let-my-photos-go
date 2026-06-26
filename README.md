@@ -26,8 +26,17 @@ The Google Photos API is used for **enumeration** (listing all your photos and t
 
 ## Installation
 
-**One-time: authenticate with GitHub Packages.**  
-Generate a token at <https://github.com/settings/tokens> with the `read:packages` scope, then add it to `~/.npmrc`:
+**One-time: authenticate with GitHub Packages.**
+
+Generate a token at <https://github.com/settings/tokens> with the `read:packages` scope, then log in:
+
+```bash
+npm login --registry=https://npm.pkg.github.com
+# Username: your GitHub username
+# Password: your token
+```
+
+Alternatively, add the token directly to `~/.npmrc`:
 
 ```
 @gabrielgrijincu:registry=https://npm.pkg.github.com
@@ -270,29 +279,29 @@ If `lmpg enumerate` reports more items than `lmpg status` shows as the database 
 
 ## Commands
 
-| Command                                    | Short | Description                                              |
-| ------------------------------------------ | ----- | -------------------------------------------------------- |
-| `lmpg auth`                                |       | Log in to Google Photos (saves browser session)          |
-| `lmpg config`                              |       | Set output directory                                     |
-| `lmpg enumerate`                           |       | Scan library and populate database                       |
-| `lmpg enumerate-albums`                    |       | Scan albums and save membership to database              |
-| `lmpg flee`                                |       | Download all pending timeline photos                     |
-| `lmpg flee --failed-only`                  | `-f`  | Only retry previously failed photos                      |
-| `lmpg flee --limit <n>`                    | `-l`  | Cap number of downloads                                  |
-| `lmpg flee --concurrency <n>`              | `-c`  | Parallel downloads (default: 3)                          |
-| `lmpg flee --inspect`                      |       | Headed browser with DevTools                             |
-| `lmpg flee-albums`                         |       | Download album photos into `albums/`; symlink timeline   |
-| `lmpg flee-albums --failed-only`           | `-f`  | Only retry previously failed album photos                |
-| `lmpg flee-albums --limit <n>`             | `-l`  | Cap number of downloads                                  |
-| `lmpg flee-albums --concurrency <n>`       | `-c`  | Parallel downloads per album (default: 3)                |
-| `lmpg flee-albums --inspect`               |       | Headed browser with DevTools                             |
-| `lmpg status`                              |       | Show download progress                                   |
-| `lmpg verify`                              |       | Check unverified photos, reset broken records to pending |
-| `lmpg verify --dry-run`                    |       | Report issues only, without resetting records            |
-| `lmpg scrub`                               |       | Delete files on disk with no matching database record    |
-| `lmpg scrub --dry-run`                     |       | Preview what scrub would delete                          |
-| `lmpg -p <name> <command>`                 | `-p`  | Use a named profile (separate auth, DB, and config)      |
-| `lmpg -v`                                  |       | Print version                                            |
+| Command                              | Short | Description                                              |
+| ------------------------------------ | ----- | -------------------------------------------------------- |
+| `lmpg auth`                          |       | Log in to Google Photos (saves browser session)          |
+| `lmpg config`                        |       | Set output directory                                     |
+| `lmpg enumerate`                     |       | Scan library and populate database                       |
+| `lmpg enumerate-albums`              |       | Scan albums and save membership to database              |
+| `lmpg flee`                          |       | Download all pending timeline photos                     |
+| `lmpg flee --failed-only`            | `-f`  | Only retry previously failed photos                      |
+| `lmpg flee --limit <n>`              | `-l`  | Cap number of downloads                                  |
+| `lmpg flee --concurrency <n>`        | `-c`  | Parallel downloads (default: 3)                          |
+| `lmpg flee --inspect`                |       | Headed browser with DevTools                             |
+| `lmpg flee-albums`                   |       | Download album photos into `albums/`; symlink timeline   |
+| `lmpg flee-albums --failed-only`     | `-f`  | Only retry previously failed album photos                |
+| `lmpg flee-albums --limit <n>`       | `-l`  | Cap number of downloads                                  |
+| `lmpg flee-albums --concurrency <n>` | `-c`  | Parallel downloads per album (default: 3)                |
+| `lmpg flee-albums --inspect`         |       | Headed browser with DevTools                             |
+| `lmpg status`                        |       | Show download progress                                   |
+| `lmpg verify`                        |       | Check unverified photos, reset broken records to pending |
+| `lmpg verify --dry-run`              |       | Report issues only, without resetting records            |
+| `lmpg scrub`                         |       | Delete files on disk with no matching database record    |
+| `lmpg scrub --dry-run`               |       | Preview what scrub would delete                          |
+| `lmpg -p <name> <command>`           | `-p`  | Use a named profile (separate auth, DB, and config)      |
+| `lmpg -v`                            |       | Print version                                            |
 
 ---
 
