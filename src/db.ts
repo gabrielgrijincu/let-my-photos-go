@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { getDbPath } from './paths.js';
+import { getDbPath } from './paths';
 
 export type PhotoStatus = 'pending' | 'downloaded' | 'failed';
 export type PhotoSource = 'timeline' | 'album';

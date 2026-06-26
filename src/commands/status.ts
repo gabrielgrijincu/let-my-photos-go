@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import * as clack from '@clack/prompts';
 import * as fs from 'fs';
-import { getStats } from '../db.js';
-import { getAuthPath } from '../paths.js';
+import { getStats } from '../db';
+import { getAuthPath } from '../paths';
 
 export const statusCommand = new Command('status').description('Show download progress').action(() => {
   clack.intro('🕊️  Let My Photos Go — Status');

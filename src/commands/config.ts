@@ -3,8 +3,8 @@ import * as clack from '@clack/prompts';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { readConfig, writeConfig } from '../config.js';
-import { getAuthPath, ensureDataDir } from '../paths.js';
+import { readConfig, writeConfig } from '../config';
+import { getAuthPath, ensureDataDir } from '../paths';
 
 const DEFAULT_OUTPUT_DIR = path.join(os.homedir(), 'Pictures', 'let-my-photos-go');
 

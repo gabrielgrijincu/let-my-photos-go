@@ -2,8 +2,8 @@ import { Command } from 'commander';
 import * as clack from '@clack/prompts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { getDb } from '../db.js';
-import { readConfig } from '../config.js';
+import { getDb } from '../db';
+import { readConfig } from '../config';
 
 async function walk(dir: string, entries: string[]): Promise<void> {
   for (const entry of await fs.readdir(dir, { withFileTypes: true })) {

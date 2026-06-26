@@ -1,10 +1,10 @@
 import { Command } from 'commander';
 import * as clack from '@clack/prompts';
 import * as fs from 'fs';
-import { launchHeadlessBrowser, saveSession } from '../browser.js';
-import { getAuthPath } from '../paths.js';
-import { enumerateAllMediaItems } from '../api.js';
-import { upsertPhoto, getStats } from '../db.js';
+import { launchHeadlessBrowser, saveSession } from '../browser';
+import { getAuthPath } from '../paths';
+import { enumerateAllMediaItems } from '../api';
+import { upsertPhoto, getStats } from '../db';
 
 export const enumerateCommand = new Command('enumerate')
   .description('Scan Google Photos and populate the local database with photo metadata')

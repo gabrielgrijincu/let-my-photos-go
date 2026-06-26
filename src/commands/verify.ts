@@ -2,10 +2,10 @@ import { Command } from 'commander';
 import * as clack from '@clack/prompts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { getDb, markVerified, resetToPending, setCompanionPath, clearAllVerified } from '../db.js';
-import type { PhotoRecord } from '../db.js';
-import { readConfig } from '../config.js';
-import { runWithConcurrency } from '../util.js';
+import { getDb, markVerified, resetToPending, setCompanionPath, clearAllVerified } from '../db';
+import type { PhotoRecord } from '../db';
+import { readConfig } from '../config';
+import { runWithConcurrency } from '../util';
 
 type IssueReason =
   | 'missing'

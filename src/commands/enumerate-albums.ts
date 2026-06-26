@@ -1,16 +1,16 @@
 import { Command } from 'commander';
 import * as clack from '@clack/prompts';
 import * as fs from 'fs';
-import { launchHeadlessBrowser, saveSession } from '../browser.js';
-import { getAuthPath } from '../paths.js';
-import { readConfig } from '../config.js';
-import { extractBatchParams, enumerateAllAlbums, fetchAlbumPhotos, type Album } from '../api.js';
+import { launchHeadlessBrowser, saveSession } from '../browser';
+import { getAuthPath } from '../paths';
+import { readConfig } from '../config';
+import { extractBatchParams, enumerateAllAlbums, fetchAlbumPhotos, type Album } from '../api';
 import {
   upsertAlbum,
   upsertAlbumPhotos,
   upsertAlbumPhoto,
   ensurePhotoRecord,
-} from '../db.js';
+} from '../db';
 
 export const enumerateAlbumsCommand = new Command('enumerate-albums')
   .description('Scan all albums and persist membership to the database')

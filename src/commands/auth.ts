@@ -2,10 +2,10 @@ import { Command } from 'commander';
 import * as fs from 'fs';
 import * as clack from '@clack/prompts';
 import type { Response } from 'playwright';
-import { launchHeadedBrowser, saveSession } from '../browser.js';
-import { ensureDataDir, getAuthPath, getConfigPath } from '../paths.js';
-import { readConfig } from '../config.js';
-import { findRpcInner } from '../api.js';
+import { launchHeadedBrowser, saveSession } from '../browser';
+import { ensureDataDir, getAuthPath, getConfigPath } from '../paths';
+import { readConfig } from '../config';
+import { findRpcInner } from '../api';
 
 export const authCommand = new Command('auth')
   .description('Log in to Google Photos (saves browser session for downloads)')

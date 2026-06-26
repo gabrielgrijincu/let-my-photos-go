@@ -4,12 +4,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import AdmZip from 'adm-zip';
 import { utimes } from 'utimes';
-import { launchHeadlessBrowser, saveSession } from '../browser.js';
-import { getAuthPath } from '../paths.js';
-import { markDownloaded, markFailed, getAlbumPhotosForFlee } from '../db.js';
-import type { AlbumPhotoRow } from '../db.js';
-import { readConfig } from '../config.js';
-import { runWithConcurrency, buildFilename } from '../util.js';
+import { launchHeadlessBrowser, saveSession } from '../browser';
+import { getAuthPath } from '../paths';
+import { markDownloaded, markFailed, getAlbumPhotosForFlee } from '../db';
+import type { AlbumPhotoRow } from '../db';
+import { readConfig } from '../config';
+import { runWithConcurrency, buildFilename } from '../util';
 
 function sanitizeTitle(title: string): string {
   return title.replace(/[/\\:*?"<>|]/g, '-').trim();

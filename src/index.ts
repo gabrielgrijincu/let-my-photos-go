@@ -3,16 +3,16 @@
 process.title = ['lmpg', ...process.argv.slice(2)].join(' ');
 
 import { Command } from 'commander';
-import { configCommand } from './commands/config.js';
-import { authCommand } from './commands/auth.js';
-import { enumerateAlbumsCommand } from './commands/enumerate-albums.js';
-import { enumerateCommand } from './commands/enumerate.js';
-import { fleeCommand } from './commands/flee.js';
-import { fleeAlbumsCommand } from './commands/flee-albums.js';
-import { statusCommand } from './commands/status.js';
-import { verifyCommand } from './commands/verify.js';
-import { scrubCommand } from './commands/scrub.js';
-import { setProfile } from './paths.js';
+import { configCommand } from './commands/config';
+import { authCommand } from './commands/auth';
+import { enumerateAlbumsCommand } from './commands/enumerate-albums';
+import { enumerateCommand } from './commands/enumerate';
+import { fleeCommand } from './commands/flee';
+import { fleeAlbumsCommand } from './commands/flee-albums';
+import { statusCommand } from './commands/status';
+import { verifyCommand } from './commands/verify';
+import { scrubCommand } from './commands/scrub';
+import { setProfile } from './paths';
 
 const program = new Command();
 

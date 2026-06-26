@@ -1,5 +1,5 @@
 import { chromium, Browser, BrowserContext } from 'playwright';
-import { getAuthPath } from './paths.js';
+import { getAuthPath } from './paths';
 
 export async function launchHeadedBrowser(
   storageState?: string,

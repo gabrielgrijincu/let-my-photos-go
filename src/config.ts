@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { getConfigPath } from './paths.js';
+import { getConfigPath } from './paths';
 
 export interface Config {
   outputDir: string;
