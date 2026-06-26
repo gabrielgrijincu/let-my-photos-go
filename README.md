@@ -28,8 +28,9 @@ The Google Photos API is used for **enumeration** (listing all your photos and t
 
 ```bash
 npm install -g let-my-photos-go
-npx playwright install chromium
 ```
+
+The Chromium browser is downloaded automatically during install.
 
 ---
 
