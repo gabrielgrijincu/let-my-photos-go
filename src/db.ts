@@ -123,7 +123,8 @@ export function markFailed(mediaItemId: string): void {
 
 export function clearAllVerified(): number {
   const db = getDb();
-  return (db.prepare(`UPDATE photos SET verified_at = NULL WHERE verified_at IS NOT NULL`).run() as { changes: number }).changes;
+  return (db.prepare(`UPDATE photos SET verified_at = NULL WHERE verified_at IS NOT NULL`).run() as { changes: number })
+    .changes;
 }
 
 export function markVerified(mediaItemId: string): void {
@@ -205,16 +206,13 @@ export function upsertAlbumPhotos(
 
 export function ensurePhotoRecord(mediaItemId: string, creationTime: string | null): void {
   const db = getDb();
-  db.prepare(
-    `INSERT OR IGNORE INTO photos (media_item_id, creation_time, source) VALUES (?, ?, 'album')`,
-  ).run(mediaItemId, creationTime);
+  db.prepare(`INSERT OR IGNORE INTO photos (media_item_id, creation_time, source) VALUES (?, ?, 'album')`).run(
+    mediaItemId,
+    creationTime,
+  );
 }
 
-export function upsertAlbumPhoto(
-  mediaItemId: string,
-  googleUrl: string,
-  creationTime: string | null,
-): void {
+export function upsertAlbumPhoto(mediaItemId: string, googleUrl: string, creationTime: string | null): void {
   const db = getDb();
   db.prepare(
     `INSERT INTO photos (media_item_id, google_url, creation_time, source)
@@ -224,7 +222,6 @@ export function upsertAlbumPhoto(
      WHERE photos.status IN ('pending', 'failed')`,
   ).run(mediaItemId, googleUrl, creationTime);
 }
-
 
 export interface AlbumPhotoRow {
   albumId: string;
@@ -238,7 +235,9 @@ export interface AlbumPhotoRow {
 }
 
 export function getAlbumPhotosForFlee(): AlbumPhotoRow[] {
-  return getDb().prepare(`
+  return getDb()
+    .prepare(
+      `
     SELECT a.album_id      AS albumId,
            a.title         AS albumTitle,
            p.media_item_id AS mediaItemId,
@@ -251,9 +250,10 @@ export function getAlbumPhotosForFlee(): AlbumPhotoRow[] {
     JOIN album_photos ap ON ap.album_id = a.album_id
     JOIN photos p ON p.media_item_id = ap.media_item_id
     ORDER BY a.title, p.creation_time, p.media_item_id
-  `).all() as AlbumPhotoRow[];
+  `,
+    )
+    .all() as AlbumPhotoRow[];
 }
-
 
 export function getStats(): { total: number; downloaded: number; failed: number; pending: number } {
   const db = getDb();

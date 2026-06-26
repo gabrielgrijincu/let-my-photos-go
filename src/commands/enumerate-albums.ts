@@ -5,17 +5,12 @@ import { launchHeadlessBrowser, saveSession } from '../browser';
 import { getAuthPath } from '../paths';
 import { readConfig } from '../config';
 import { extractBatchParams, enumerateAllAlbums, fetchAlbumPhotos, type Album } from '../api';
-import {
-  upsertAlbum,
-  upsertAlbumPhotos,
-  upsertAlbumPhoto,
-  ensurePhotoRecord,
-} from '../db';
+import { upsertAlbum, upsertAlbumPhotos, upsertAlbumPhoto, ensurePhotoRecord } from '../db';
 
 export const enumerateAlbumsCommand = new Command('enumerate-albums')
   .description('Scan all albums and persist membership to the database')
   .option('--owned', 'only include photos you uploaded (default)')
-  .option('--all', 'include all photos; download others\' photos on next `lmpg flee`')
+  .option('--all', "include all photos; download others' photos on next `lmpg flee`")
   .action(async (options: { owned?: boolean; all?: boolean }, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
@@ -76,9 +71,7 @@ export const enumerateAlbumsCommand = new Command('enumerate-albums')
 
       const photos = await fetchAlbumPhotos(context, params, album);
 
-      const filteredPhotos = photos.filter(s =>
-        includeAll || s.uploaderToken === googleUserToken,
-      );
+      const filteredPhotos = photos.filter(s => includeAll || s.uploaderToken === googleUserToken);
 
       upsertAlbum(album.albumId, album.title, album.photoCount);
       upsertAlbumPhotos(album.albumId, filteredPhotos);

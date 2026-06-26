@@ -40,16 +40,23 @@ export const scrubCommand = new Command('scrub')
     spinner.start('Loading known paths from database…');
 
     const db = getDb();
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(
+        `
       SELECT dest_path, companion_path FROM photos
       WHERE dest_path IS NOT NULL
-    `).all() as { dest_path: string; companion_path: string | null }[];
+    `,
+      )
+      .all() as { dest_path: string; companion_path: string | null }[];
 
     const known = new Set<string>();
     let companionCount = 0;
     for (const row of rows) {
       known.add(row.dest_path.normalize('NFC'));
-      if (row.companion_path) { known.add(row.companion_path.normalize('NFC')); companionCount++; }
+      if (row.companion_path) {
+        known.add(row.companion_path.normalize('NFC'));
+        companionCount++;
+      }
     }
 
     spinner.message('Scanning files on disk…');

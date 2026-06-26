@@ -39,20 +39,25 @@ export const authCommand = new Command('auth')
     // Capture the permanent numeric Google user ID and auth token from the O3G8Nd RPC,
     // which fires automatically when the main photos.google.com page loads.
     let resolveIdentity!: (id: { userId: string; userToken: string } | null) => void;
-    const identityCapture = new Promise<{ userId: string; userToken: string } | null>(r => { resolveIdentity = r; });
+    const identityCapture = new Promise<{ userId: string; userToken: string } | null>(r => {
+      resolveIdentity = r;
+    });
 
     const onResponse = (response: Response) => {
       if (!response.url().includes('batchexecute')) return;
       if (!(new URL(response.url()).searchParams.get('rpcids') ?? '').includes('O3G8Nd')) return;
-      response.text().then(text => {
-        try {
-          const inner = findRpcInner(text, 'O3G8Nd') as unknown[][];
-          const userToken = inner[0]?.[0];
-          const userId = inner[0]?.[1];
-          if (typeof userId === 'string' && /^\d+$/.test(userId) && typeof userToken === 'string')
-            resolveIdentity({ userId, userToken });
-        } catch {}
-      }).catch(() => {});
+      response
+        .text()
+        .then(text => {
+          try {
+            const inner = findRpcInner(text, 'O3G8Nd') as unknown[][];
+            const userToken = inner[0]?.[0];
+            const userId = inner[0]?.[1];
+            if (typeof userId === 'string' && /^\d+$/.test(userId) && typeof userToken === 'string')
+              resolveIdentity({ userId, userToken });
+          } catch {}
+        })
+        .catch(() => {});
     };
     context.on('response', onResponse);
 
@@ -67,10 +72,7 @@ export const authCommand = new Command('auth')
       process.exit(1);
     }
 
-    const identity = await Promise.race([
-      identityCapture,
-      new Promise<null>(r => setTimeout(() => r(null), 10_000)),
-    ]);
+    const identity = await Promise.race([identityCapture, new Promise<null>(r => setTimeout(() => r(null), 10_000))]);
     context.off('response', onResponse);
 
     const saveSpinner = clack.spinner();
@@ -79,7 +81,9 @@ export const authCommand = new Command('auth')
     if (identity) {
       try {
         let raw: Record<string, unknown> = {};
-        try { raw = JSON.parse(fs.readFileSync(getConfigPath(), 'utf-8')) as Record<string, unknown>; } catch {}
+        try {
+          raw = JSON.parse(fs.readFileSync(getConfigPath(), 'utf-8')) as Record<string, unknown>;
+        } catch {}
         raw.googleUserId = identity.userId;
         raw.googleUserToken = identity.userToken;
         fs.writeFileSync(getConfigPath(), JSON.stringify(raw, null, 2));

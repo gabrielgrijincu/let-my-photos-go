@@ -28,7 +28,10 @@ function resolveAlbumFilename(filename: string, usedNames: Set<string>): string 
   return candidate;
 }
 
-async function createOrUpdateSymlink(linkPath: string, targetRel: string): Promise<'created' | 'skipped' | 'fixed' | 'blocked'> {
+async function createOrUpdateSymlink(
+  linkPath: string,
+  targetRel: string,
+): Promise<'created' | 'skipped' | 'fixed' | 'blocked'> {
   try {
     const stat = await fs.promises.lstat(linkPath);
     if (!stat.isSymbolicLink()) return 'blocked';
@@ -61,7 +64,9 @@ function relPath(abs: string, base: string): string {
 }
 
 export const fleeAlbumsCommand = new Command('flee-albums')
-  .description('Download album photos directly into albums/ folders, symlinking timeline photos that are already on disk')
+  .description(
+    'Download album photos directly into albums/ folders, symlinking timeline photos that are already on disk',
+  )
   .option('-f, --failed-only', 'Only retry photos that previously failed (still creates symlinks for downloaded ones)')
   .option('-l, --limit <n>', 'Maximum number of photos to download', parseInt)
   .option('-c, --concurrency <n>', 'Number of parallel downloads within each album', parseInt)
@@ -123,9 +128,7 @@ export const fleeAlbumsCommand = new Command('flee-albums')
 
       const totalPhotos = rows.length;
       const pendingCount = rows.filter(r => r.status !== 'downloaded').length;
-      spinner.stop(
-        `${albumMap.size} albums, ${totalPhotos} photos total (${pendingCount} not yet downloaded).`,
-      );
+      spinner.stop(`${albumMap.size} albums, ${totalPhotos} photos total (${pendingCount} not yet downloaded).`);
 
       if (pendingCount === 0 && !options.failedOnly) {
         // All downloaded — still need to create/update symlinks
@@ -268,12 +271,16 @@ export const fleeAlbumsCommand = new Command('flee-albums')
 
         // Pass 2: downloads (concurrent)
         const toDownload = album.photos.filter(p => {
-          if (downloaded.has(p.mediaItemId) && fs.existsSync(path.join(outputDir, downloaded.get(p.mediaItemId)!.destPath))) return false;
+          if (
+            downloaded.has(p.mediaItemId) &&
+            fs.existsSync(path.join(outputDir, downloaded.get(p.mediaItemId)!.destPath))
+          )
+            return false;
           if (options.failedOnly && p.status === 'pending') return false;
           return true;
         });
 
-        await runWithConcurrency(toDownload, concurrency, async (photo) => {
+        await runWithConcurrency(toDownload, concurrency, async photo => {
           if (sessionExpired || shuttingDown) return;
           if (options.limit && downloadedThisRun >= options.limit) return;
 
@@ -302,7 +309,9 @@ export const fleeAlbumsCommand = new Command('flee-albums')
               if (!page.url().startsWith('https://photos.google.com/')) {
                 if (!sessionExpired) {
                   sessionExpired = true;
-                  clack.log.error(`Session expired — run \`${lmpg('auth')}\`, then \`${lmpg('flee-albums')}\` to continue.`);
+                  clack.log.error(
+                    `Session expired — run \`${lmpg('auth')}\`, then \`${lmpg('flee-albums')}\` to continue.`,
+                  );
                 }
                 return;
               }
@@ -350,15 +359,26 @@ export const fleeAlbumsCommand = new Command('flee-albums')
                       stillFilename,
                       companionAbs ? relPath(companionAbs, outputDir) : undefined,
                     );
-                    downloaded.set(photo.mediaItemId, { destPath: relPath(stillAbs, outputDir), filename: stillFilename });
+                    downloaded.set(photo.mediaItemId, {
+                      destPath: relPath(stillAbs, outputDir),
+                      filename: stillFilename,
+                    });
                   }
                 } catch (zipErr) {
-                  for (const p of extractedPaths) { try { fs.unlinkSync(p); } catch { /* ignore */ } }
+                  for (const p of extractedPaths) {
+                    try {
+                      fs.unlinkSync(p);
+                    } catch {
+                      /* ignore */
+                    }
+                  }
                   throw zipErr;
                 } finally {
                   for (let attempt = 0; attempt < 3; attempt++) {
-                    try { fs.unlinkSync(tmpZip); break; }
-                    catch (e) {
+                    try {
+                      fs.unlinkSync(tmpZip);
+                      break;
+                    } catch (e) {
                       if ((e as NodeJS.ErrnoException).code === 'ENOENT') break;
                       if (attempt < 2) await new Promise(r => setTimeout(r, 500));
                       else clack.log.warn(`Could not delete ZIP ${tmpZip}: ${(e as Error).message}`);
@@ -378,7 +398,9 @@ export const fleeAlbumsCommand = new Command('flee-albums')
 
               downloadCount++;
               downloadedThisRun++;
-              albumProgressSpinner.message(`[${albumIndex}/${albumMap.size}] ${album.title} — downloaded ${downloadedThisRun}`);
+              albumProgressSpinner.message(
+                `[${albumIndex}/${albumMap.size}] ${album.title} — downloaded ${downloadedThisRun}`,
+              );
               return;
             } catch (err) {
               if (!shuttingDown && !sessionExpired && (await isNetworkIssue(err as Error))) {
@@ -424,7 +446,9 @@ export const fleeAlbumsCommand = new Command('flee-albums')
         symlinkBlocked > 0 ? `${symlinkBlocked} symlinks blocked (non-symlink file exists)` : null,
         `${downloadedThisRun} downloaded`,
         failed > 0 ? `${failed} failed` : null,
-      ].filter(Boolean).join(', ');
+      ]
+        .filter(Boolean)
+        .join(', ');
       clack.log.info(parts);
 
       if (sessionExpired) {

@@ -120,167 +120,169 @@ export const verifyCommand = new Command('verify')
     const spinner = clack.spinner();
     spinner.start(`Verifying ${total.toLocaleString()} unverified photos…`);
     try {
+      let stopping = false;
 
-    let stopping = false;
-
-    process.once('SIGINT', () => {
-      stopping = true;
-    });
-
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-      process.stdin.resume();
-      process.stdin.on('data', (key: Buffer) => {
-        const k = key.toString();
-        if (k === '' || k === '') stopping = true;
+      process.once('SIGINT', () => {
+        stopping = true;
       });
-    }
 
-    const issues: Issue[] = [];
-    let checked = 0;
-    const pendingBackfills: Array<{ mediaItemId: string; companionPath: string }> = [];
-    const pendingVerifies: string[] = [];
-
-    const db = getDb();
-    const records = db
-      .prepare(`SELECT * FROM photos WHERE status = 'downloaded' AND verified_at IS NULL`)
-      .all() as PhotoRecord[];
-
-    await runWithConcurrency(records, 20, async (record) => {
-      if (stopping) return;
-      checked++;
-      spinner.message(`Verifying ${checked.toLocaleString()} / ${total.toLocaleString()}…`);
-
-      const issuesBefore = issues.length;
-
-      // --- stale zip ---
-      if (record.dest_path?.endsWith('.zip')) {
-        issues.push({ record, reason: 'stale-zip' });
-        return;
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.on('data', (key: Buffer) => {
+          const k = key.toString();
+          if (k === '' || k === '') stopping = true;
+        });
       }
 
-      // --- primary file ---
-      if (!record.dest_path) {
-        issues.push({ record, reason: 'missing' });
-        return;
-      }
-      const absFile = absPath(record.dest_path, outputDir);
-      if (!(await fileExists(absFile))) {
-        issues.push({ record, reason: 'missing' });
-        return;
-      }
-      const actualSize = await fileSize(absFile);
-      if (actualSize === 0) {
-        issues.push({ record, reason: 'empty' });
-        return;
-      }
-      // --- companion discovery (before size check so combined size can be tested) ---
-      let companionAbs = record.companion_path ? absPath(record.companion_path, outputDir) : null;
+      const issues: Issue[] = [];
+      let checked = 0;
+      const pendingBackfills: Array<{ mediaItemId: string; companionPath: string }> = [];
+      const pendingVerifies: string[] = [];
 
-      if (!companionAbs && STILL_IMAGE_EXTS.has(path.extname(absFile).toLowerCase())) {
-        const candidate = absFile.replace(/\.[^.]+$/, '.mov');
-        if (await fileExists(candidate)) {
-          companionAbs = candidate;
-          pendingBackfills.push({
-            mediaItemId: record.media_item_id,
-            companionPath: path.relative(outputDir, candidate),
-          });
+      const db = getDb();
+      const records = db
+        .prepare(`SELECT * FROM photos WHERE status = 'downloaded' AND verified_at IS NULL`)
+        .all() as PhotoRecord[];
+
+      await runWithConcurrency(records, 20, async record => {
+        if (stopping) return;
+        checked++;
+        spinner.message(`Verifying ${checked.toLocaleString()} / ${total.toLocaleString()}…`);
+
+        const issuesBefore = issues.length;
+
+        // --- stale zip ---
+        if (record.dest_path?.endsWith('.zip')) {
+          issues.push({ record, reason: 'stale-zip' });
+          return;
         }
-      }
 
-      let companionExists = false;
-      let companionSize = 0;
-      if (companionAbs) {
-        companionExists = await fileExists(companionAbs);
-        if (companionExists) companionSize = await fileSize(companionAbs);
-      }
-
-      if (!(await checkMagicBytes(absFile))) {
-        issues.push({ record, reason: 'corrupt' });
-        return;
-      }
-
-      // --- companion checks ---
-      if (companionAbs) {
-        if (!companionExists) {
-          issues.push({ record, reason: 'missing-companion' });
-        } else if (companionSize === 0) {
-          issues.push({ record, reason: 'empty-companion' });
-        } else if (!(await checkMagicBytes(companionAbs))) {
-          issues.push({ record, reason: 'corrupt-companion' });
+        // --- primary file ---
+        if (!record.dest_path) {
+          issues.push({ record, reason: 'missing' });
+          return;
         }
+        const absFile = absPath(record.dest_path, outputDir);
+        if (!(await fileExists(absFile))) {
+          issues.push({ record, reason: 'missing' });
+          return;
+        }
+        const actualSize = await fileSize(absFile);
+        if (actualSize === 0) {
+          issues.push({ record, reason: 'empty' });
+          return;
+        }
+        // --- companion discovery (before size check so combined size can be tested) ---
+        let companionAbs = record.companion_path ? absPath(record.companion_path, outputDir) : null;
+
+        if (!companionAbs && STILL_IMAGE_EXTS.has(path.extname(absFile).toLowerCase())) {
+          const candidate = absFile.replace(/\.[^.]+$/, '.mov');
+          if (await fileExists(candidate)) {
+            companionAbs = candidate;
+            pendingBackfills.push({
+              mediaItemId: record.media_item_id,
+              companionPath: path.relative(outputDir, candidate),
+            });
+          }
+        }
+
+        let companionExists = false;
+        let companionSize = 0;
+        if (companionAbs) {
+          companionExists = await fileExists(companionAbs);
+          if (companionExists) companionSize = await fileSize(companionAbs);
+        }
+
+        if (!(await checkMagicBytes(absFile))) {
+          issues.push({ record, reason: 'corrupt' });
+          return;
+        }
+
+        // --- companion checks ---
+        if (companionAbs) {
+          if (!companionExists) {
+            issues.push({ record, reason: 'missing-companion' });
+          } else if (companionSize === 0) {
+            issues.push({ record, reason: 'empty-companion' });
+          } else if (!(await checkMagicBytes(companionAbs))) {
+            issues.push({ record, reason: 'corrupt-companion' });
+          }
+        }
+
+        if (issues.length === issuesBefore) {
+          pendingVerifies.push(record.media_item_id);
+        }
+      });
+
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
       }
 
-      if (issues.length === issuesBefore) {
-        pendingVerifies.push(record.media_item_id);
+      // Apply writes after the iterator is closed (can't write while iterating)
+      for (const { mediaItemId, companionPath } of pendingBackfills) {
+        setCompanionPath(mediaItemId, companionPath);
       }
-    });
+      for (const mediaItemId of pendingVerifies) {
+        markVerified(mediaItemId);
+      }
 
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
-      process.stdin.pause();
-    }
-
-    // Apply writes after the iterator is closed (can't write while iterating)
-    for (const { mediaItemId, companionPath } of pendingBackfills) {
-      setCompanionPath(mediaItemId, companionPath);
-    }
-    for (const mediaItemId of pendingVerifies) {
-      markVerified(mediaItemId);
-    }
-
-    spinner.stop(
-      stopping
-        ? `Stopped after ${checked.toLocaleString()} / ${total.toLocaleString()} photos.`
-        : `Verified ${total.toLocaleString()} photos.`,
-    );
-
-    if (pendingBackfills.length > 0) {
-      clack.log.info(`Backfilled companion path for ${pendingBackfills.length.toLocaleString()} Live Photo(s).`);
-    }
-
-    if (issues.length === 0) {
-      clack.log.success(
+      spinner.stop(
         stopping
-          ? `No issues found in the ${checked.toLocaleString()} photos checked.`
-          : `All ${total.toLocaleString()} photos OK.`,
+          ? `Stopped after ${checked.toLocaleString()} / ${total.toLocaleString()} photos.`
+          : `Verified ${total.toLocaleString()} photos.`,
       );
-      return;
-    }
 
-    for (const { record, reason } of issues) {
-      const label =
-        reason === 'missing'
-          ? 'MISSING      '
-          : reason === 'empty'
-            ? 'EMPTY        '
-            : reason === 'corrupt'
-              ? 'CORRUPT      '
-              : reason === 'stale-zip'
-                ? 'STALE ZIP    '
-                : reason === 'missing-companion'
-                  ? 'NO COMPANION '
-                  : reason === 'empty-companion'
-                    ? 'EMPTY MOV    '
-                    : 'CORRUPT MOV  ';
-      clack.log.warn(`${label}  ${record.dest_path ?? `(no path) id=${record.media_item_id}`}`);
-    }
-
-    clack.log.error(`${issues.length.toLocaleString()} issue(s) found out of ${checked.toLocaleString()} checked.`);
-
-    if (!opts.dryRun) {
-      for (const { record } of issues) {
-        resetToPending(record.media_item_id);
+      if (pendingBackfills.length > 0) {
+        clack.log.info(`Backfilled companion path for ${pendingBackfills.length.toLocaleString()} Live Photo(s).`);
       }
-      clack.log.success(
-        `Reset ${issues.length.toLocaleString()} record(s) to pending. Run \`${lmpg('flee')}\` or \`${lmpg('flee-albums')}\` to re-download.`,
-      );
-    } else {
-      clack.log.info(`Run \`${lmpg('verify')}\` (without --dry-run) to reset these records for re-download.`);
-    }
+
+      if (issues.length === 0) {
+        clack.log.success(
+          stopping
+            ? `No issues found in the ${checked.toLocaleString()} photos checked.`
+            : `All ${total.toLocaleString()} photos OK.`,
+        );
+        return;
+      }
+
+      for (const { record, reason } of issues) {
+        const label =
+          reason === 'missing'
+            ? 'MISSING      '
+            : reason === 'empty'
+              ? 'EMPTY        '
+              : reason === 'corrupt'
+                ? 'CORRUPT      '
+                : reason === 'stale-zip'
+                  ? 'STALE ZIP    '
+                  : reason === 'missing-companion'
+                    ? 'NO COMPANION '
+                    : reason === 'empty-companion'
+                      ? 'EMPTY MOV    '
+                      : 'CORRUPT MOV  ';
+        clack.log.warn(`${label}  ${record.dest_path ?? `(no path) id=${record.media_item_id}`}`);
+      }
+
+      clack.log.error(`${issues.length.toLocaleString()} issue(s) found out of ${checked.toLocaleString()} checked.`);
+
+      if (!opts.dryRun) {
+        for (const { record } of issues) {
+          resetToPending(record.media_item_id);
+        }
+        clack.log.success(
+          `Reset ${issues.length.toLocaleString()} record(s) to pending. Run \`${lmpg('flee')}\` or \`${lmpg('flee-albums')}\` to re-download.`,
+        );
+      } else {
+        clack.log.info(`Run \`${lmpg('verify')}\` (without --dry-run) to reset these records for re-download.`);
+      }
     } catch (err) {
       spinner.stop('Error.');
-      if (process.stdin.isTTY) { process.stdin.setRawMode(false); process.stdin.pause(); }
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+      }
       clack.log.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }

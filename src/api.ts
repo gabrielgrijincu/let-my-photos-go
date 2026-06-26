@@ -9,8 +9,8 @@ export interface MediaItem {
 }
 
 export interface AlbumMember {
-  token: string;   // stable per-user auth token (AF1Qip…)
-  userId: string;  // numeric Google user ID
+  token: string; // stable per-user auth token (AF1Qip…)
+  userId: string; // numeric Google user ID
   displayName: string | null;
 }
 
@@ -25,7 +25,7 @@ export interface Album {
 export interface AlbumPhoto {
   mediaItemId: string;
   uploaderToken: string | null; // uploader auth token from snAcKc photo[6][0]
-  creationTime: number | null;  // ms timestamp from snAcKc photo[2]
+  creationTime: number | null; // ms timestamp from snAcKc photo[2]
 }
 
 export interface BatchParams {

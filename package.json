@@ -4,8 +4,8 @@
   "type": "module",
   "description": "🕊️ Because your photos deserve to be free",
   "bin": {
-    "let-my-photos-go": "./dist/index.js",
-    "lmpg": "./dist/index.js"
+    "let-my-photos-go": "dist/index.js",
+    "lmpg": "dist/index.js"
   },
   "files": [
     "dist"
@@ -28,7 +28,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/gabrielgrijincu/let-my-photos-go"
+    "url": "git+https://github.com/gabrielgrijincu/let-my-photos-go.git"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"

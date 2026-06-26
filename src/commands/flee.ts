@@ -21,12 +21,7 @@ function absPath(stored: string, base: string): string {
   return path.isAbsolute(stored) ? stored : path.resolve(base, stored);
 }
 
-function resolveDestPath(
-  outputDir: string,
-  photo: PhotoRecord,
-  filename: string,
-  reserved: Set<string>,
-): string {
+function resolveDestPath(outputDir: string, photo: PhotoRecord, filename: string, reserved: Set<string>): string {
   const date = photo.creation_time ? new Date(photo.creation_time) : null;
   const valid = date && !isNaN(date.getTime());
   const year = valid ? String(date!.getUTCFullYear()) : 'unknown';
@@ -348,7 +343,9 @@ export const fleeCommand = new Command('flee')
 
       for (let chunkStart = 0; chunkStart < pending.length; chunkStart += BROWSER_RESTART_EVERY) {
         if (chunkStart > 0) {
-          downloadSpinner.message(`[${prevDownloaded + downloaded + failed}/${grandTotal}] Restarting browser to free memory…`);
+          downloadSpinner.message(
+            `[${prevDownloaded + downloaded + failed}/${grandTotal}] Restarting browser to free memory…`,
+          );
           await saveSession(context);
           await browser.close();
           ({ browser, context } = await launchHeadlessBrowser({ inspect: options.inspect }));
@@ -381,6 +378,10 @@ export const fleeCommand = new Command('flee')
       downloadSpinner.stop(
         `Downloaded ${downloaded} photos.${failed > 0 ? ` ${failed} failed (run again to retry).` : ' 🎉'}`,
       );
-      clack.outro(failed > 0 ? `Run \`${lmpg('flee')}\` to retry failed downloads.` : `Run \`${lmpg('verify')}\` to check your downloads.`);
+      clack.outro(
+        failed > 0
+          ? `Run \`${lmpg('flee')}\` to retry failed downloads.`
+          : `Run \`${lmpg('verify')}\` to check your downloads.`,
+      );
     },
   );
