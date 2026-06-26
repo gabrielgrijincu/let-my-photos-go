@@ -1,5 +1,5 @@
 {
-  "name": "let-my-photos-go",
+  "name": "@gabrielgrijincu/let-my-photos-go",
   "version": "0.1.0",
   "type": "module",
   "description": "🕊️ Because your photos deserve to be free",
@@ -7,8 +7,12 @@
     "let-my-photos-go": "./dist/index.js",
     "lmpg": "./dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc --noEmit && esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --outfile=dist/index.js && chmod +x dist/index.js",
+    "prepublishOnly": "yarn build",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "format": "prettier --write \"src/**/*.ts\""
@@ -26,21 +30,24 @@
     "type": "git",
     "url": "https://github.com/gabrielgrijincu/let-my-photos-go"
   },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "dependencies": {
-    "@clack/prompts": "^0.9.1",
-    "adm-zip": "^0.5.17",
-    "better-sqlite3": "^11.10.0",
-    "commander": "^13.1.0",
-    "playwright": "^1.52.0",
-    "utimes": "^5.2.1"
+    "@clack/prompts": "0.9.1",
+    "adm-zip": "0.5.17",
+    "better-sqlite3": "11.10.0",
+    "commander": "13.1.0",
+    "playwright": "1.52.0",
+    "utimes": "5.2.1"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.8",
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^22.15.21",
-    "esbuild": "^0.28.1",
-    "prettier": "^3.8.4",
-    "tsx": "^4.19.4",
-    "typescript": "^5.8.3"
+    "@types/adm-zip": "0.5.8",
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "22.15.21",
+    "esbuild": "0.28.1",
+    "prettier": "3.8.4",
+    "tsx": "4.19.4",
+    "typescript": "5.8.3"
   }
 }
