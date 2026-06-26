@@ -296,6 +296,14 @@ If `lmpg enumerate` reports more items than `lmpg status` shows as the database 
 
 ---
 
+## A note on the code
+
+Most of this code was written with the help of [Claude](https://claude.ai). I understood enough of the problem to know what I wanted — but not always enough to decode every Google Photos internal, wire up every edge case, or find the time to do it all by hand. A good servant named Claude came and helped.
+
+The codebase isn't in its best shape yet. As time allows, it will get cleaner and better.
+
+---
+
 ## License
 
 MIT

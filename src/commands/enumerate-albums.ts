@@ -100,7 +100,7 @@ export const enumerateAlbumsCommand = new Command('enumerate-albums')
 
     clack.log.info(`Persisted ${albums.length} albums, ${totalPhotoPersisted} photos.`);
     if (newPendingCount > 0) {
-      clack.log.info(`Added ${newPendingCount} photos from shared albums. Run \`${lmpg('flee')}\` to download them.`);
+      clack.log.info(`Added ${newPendingCount} photos from shared albums. Run \`${lmpg('flee-albums')}\` to download them.`);
     }
 
     clack.outro(`Run \`${lmpg('flee-albums')}\` to download and organize into albums/ folders.`);
