@@ -8,8 +8,7 @@ import { upsertPhoto, getStats } from '../db.js';
 
 export const enumerateCommand = new Command('enumerate')
   .description('Scan Google Photos and populate the local database with photo metadata')
-  .option('-l, --limit <n>', 'Stop after this many photos (for testing)', parseInt)
-  .action(async (options: { limit?: number }, cmd: Command) => {
+  .action(async (_options: Record<string, never>, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Enumerate');
@@ -33,7 +32,6 @@ export const enumerateCommand = new Command('enumerate')
       })) {
         const creationTime = item.creationTime ? new Date(item.creationTime).toISOString() : null;
         upsertPhoto(item.id, item.productUrl, creationTime, item.width, item.height);
-        if (options.limit && apiCount >= options.limit) break;
       }
     } catch (err) {
       spinner.stop('Failed to scan photos.');

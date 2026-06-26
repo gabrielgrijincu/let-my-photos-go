@@ -63,12 +63,14 @@ function relPath(abs: string, base: string): string {
 export const fleeAlbumsCommand = new Command('flee-albums')
   .description('Download album photos directly into albums/ folders, symlinking timeline photos that are already on disk')
   .option('-f, --failed-only', 'Only retry photos that previously failed (still creates symlinks for downloaded ones)')
+  .option('-l, --limit <n>', 'Maximum number of photos to download', parseInt)
   .option('-c, --concurrency <n>', 'Number of parallel downloads within each album', parseInt)
   .option('--inspect', 'Open a visible browser with DevTools for each download (for debugging)')
   .action(
     async (
       options: {
         failedOnly?: boolean;
+        limit?: number;
         concurrency?: number;
         inspect?: boolean;
       },
@@ -273,6 +275,7 @@ export const fleeAlbumsCommand = new Command('flee-albums')
 
         await runWithConcurrency(toDownload, concurrency, async (photo) => {
           if (sessionExpired || shuttingDown) return;
+          if (options.limit && downloadedThisRun >= options.limit) return;
 
           // Browser restart check
           if (downloadCount > 0 && downloadCount % BROWSER_RESTART_EVERY === 0) {

@@ -81,13 +81,13 @@ lmpg enumerate -l 10        # shorthand
 
 Re-running `enumerate` is safe and fast — it updates existing records (dimensions, file size) and adds any newly uploaded photos without touching download state.
 
-### Step 4: Download everything (`lmpg flee`)
+### Step 4: Download your timeline (`lmpg flee`)
 
 ```bash
 lmpg flee
 ```
 
-Launches a headless browser with the saved session and downloads each pending photo by triggering the "Download original" action (Shift+D) in the Google Photos web UI.
+Launches a headless browser with the saved session and downloads each pending **timeline** photo by triggering the "Download original" action (Shift+D) in the Google Photos web UI.
 
 Photos are organised into subdirectories by year and month:
 
@@ -110,13 +110,6 @@ Progress is checkpointed to `~/.let-my-photos-go/photos.db` (SQLite). If interru
 ```bash
 lmpg flee --failed-only          # only retry photos that previously failed
 lmpg flee -f                     # shorthand
-
-lmpg flee --year 2023            # only photos from 2023
-lmpg flee -y 2023                # shorthand
-
-lmpg flee --from 2022-06         # photos from June 2022 onwards
-lmpg flee --to 2023-12-31        # photos up to end of 2023
-lmpg flee --from 2022 --to 2023  # date range
 
 lmpg flee --limit 10             # download at most 10 (useful for testing)
 lmpg flee -l 10                  # shorthand
@@ -150,11 +143,13 @@ Checks every **unverified** downloaded file and reports any problems. Already-ve
 - **Magic bytes** — checks the file header matches the extension (catches truncated or corrupt downloads)
 - **Companion .mov** — verifies Live Photo pairs are intact
 
-By default, `verify` only reports issues. Add `--fix` to reset broken records to pending so `lmpg flee` can re-download them:
+By default, `verify` automatically resets broken records to pending so they can be re-downloaded. Add `--dry-run` to report issues without making any changes:
 
 ```bash
-lmpg verify --fix   # reset broken records for re-download
+lmpg verify --dry-run   # report issues only, no changes
 ```
+
+After verifying, run `lmpg flee` (for timeline photos) or `lmpg flee-albums` (for album photos) to re-download any reset records.
 
 ### Optional: Enumerate albums (`lmpg enumerate-albums`)
 
@@ -162,52 +157,45 @@ lmpg verify --fix   # reset broken records for re-download
 lmpg enumerate-albums
 ```
 
-Scans your Google Photos albums and saves album membership to the database. Required before running `organize`. Safe to re-run — adds new albums and photos without touching download state.
+Scans your Google Photos albums and saves album membership to the database. Safe to re-run — adds new albums and photos without touching download state.
 
-### Optional: Organise by album (`lmpg organize`)
+### Optional: Download and organise by album (`lmpg flee-albums`)
 
 ```bash
-lmpg organize
+lmpg flee-albums
 ```
 
-Creates an `Albums/` folder inside your output directory. Each album gets a subfolder containing **symbolic links** to the already-downloaded photos — no files are duplicated on disk.
+Downloads album photos directly into per-album subfolders inside `albums/`. Run `enumerate-albums` first.
+
+- **Photos already downloaded by `flee`** (timeline photos) are **symlinked** into the album folder — no file is duplicated on disk.
+- **Album-only photos** (photos in a shared album you never saved to your library) are downloaded directly into the album folder.
+- A photo that appears in **multiple albums** is downloaded or symlinked once; every other album gets a symlink pointing at that first copy.
 
 ```
 ~/Pictures/let-my-photos-go/
-  Albums/
+  albums/
     Egypt 2021/
-      IMG_0089.heic -> ../../2021/03/IMG_0089.heic
-      IMG_0092.mov  -> ../../2021/03/IMG_0092.mov
-    Family/
-      ...
+      28.14.35.22 - IMG_0089.heic -> ../../2021/03/28.14.35.22 - IMG_0089.heic
+      28.14.35.22 - IMG_0092.mov  -> ../../2021/03/28.14.35.22 - IMG_0092.mov
+    Shared trip/
+      15.09.22.00 - photo_from_friend.jpg   ← downloaded here (not in your timeline)
+      28.14.35.22 - IMG_0089.heic -> ../../2021/03/28.14.35.22 - IMG_0089.heic
   2021/
-    03/  IMG_0089.heic
-         IMG_0092.mov
+    03/  28.14.35.22 - IMG_0089.heic
+         28.14.35.22 - IMG_0092.mov
 ```
 
-Run `enumerate-albums` first, then `flee` (to download photos), then `organize`. Re-running `organize` is safe — it skips existing correct symlinks and fixes any that point to the wrong file.
-
-### Optional: Deduplicate album photos (`lmpg dedup-albums`)
+Re-running `flee-albums` is safe — symlinks that already point to the right file are skipped, and only photos not yet downloaded are fetched.
 
 ```bash
-lmpg dedup-albums         # dry run — shows what would be removed
-lmpg dedup-albums --fix   # apply
+lmpg flee-albums --failed-only   # only retry photos that previously failed
+lmpg flee-albums -f              # shorthand
+
+lmpg flee-albums --concurrency 5 # parallel downloads per album (default: 3)
+lmpg flee-albums -c 5            # shorthand
+
+lmpg flee-albums --inspect       # headed browser with DevTools (for debugging)
 ```
-
-When you save someone else's photo from a shared album to your library, Google Photos creates a second copy with a different ID. After downloading, you end up with the same file on disk twice — once as a timeline photo, once as an album photo.
-
-`dedup-albums` finds these pairs (matched by creation time, filename, and a full SHA-256 hash to confirm byte-identical content), deletes the album-source copy, and redirects the album record to point at the timeline file. After running it, `organize` correctly symlinks album folders to the single on-disk copy.
-
-### Optional: Remove album-only photos (`lmpg reset-albums`)
-
-```bash
-lmpg reset-albums         # dry run — shows what would be removed
-lmpg reset-albums --fix   # apply
-```
-
-Deletes downloaded album-source photos that have **no counterpart in your main timeline** — i.e. photos you saw in a shared album but never saved to your own library. Both the files on disk and the database records are removed entirely; `flee` will never attempt to re-download them.
-
-Run this **after** `dedup-albums --fix`, so that saved copies (which now share a `dest_path` with their timeline counterpart) are correctly preserved.
 
 ---
 
@@ -238,7 +226,9 @@ Each profile stores its data in `~/.let-my-photos-go-<name>/` instead of `~/.let
 
 1. **`lmpg auth`** saves a Playwright session to `~/.let-my-photos-go/auth.json`.
 2. **`lmpg enumerate`** intercepts the Bearer token the Google Photos web app uses internally, then calls the `mediaItems.list` API with it to enumerate your library and populate the local SQLite database.
-3. **`lmpg flee`** opens each photo in the browser and presses Shift+D to trigger the original-file download. Each file is saved to `<outputDir>/YYYY/MM/filename` and marked in SQLite. Duplicate filenames in the same month get a `_2`, `_3` suffix. iPhone Live Photos (downloaded as ZIPs) are extracted into a `.heic` + `.mov` pair with matching base names. Filesystem timestamps are set to the photo's original capture time.
+3. **`lmpg flee`** opens each **timeline** photo in the browser and presses Shift+D to trigger the original-file download. Each file is saved to `<outputDir>/YYYY/MM/filename` and marked in SQLite. Duplicate filenames in the same month get a `_2`, `_3` suffix. iPhone Live Photos (downloaded as ZIPs) are extracted into a `.heic` + `.mov` pair with matching base names. Filesystem timestamps are set to the photo's original capture time.
+4. **`lmpg enumerate-albums`** scans your albums and saves membership to the database.
+5. **`lmpg flee-albums`** downloads album-only photos directly into `<outputDir>/albums/<title>/` and creates symlinks there for timeline photos already on disk.
 
 ---
 
@@ -258,11 +248,12 @@ All persistent state lives in `~/.let-my-photos-go/` (or `~/.let-my-photos-go-<p
 
 ## Session Expiry
 
-Google rotates session cookies aggressively — a multi-day download job will likely require re-authenticating at least once. `lmpg flee` detects an expired session mid-run, stops gracefully, and tells you what to do:
+Google rotates session cookies aggressively — a multi-day download job will likely require re-authenticating at least once. Both `lmpg flee` and `lmpg flee-albums` detect an expired session mid-run, stop gracefully, and tell you what to do:
 
 ```bash
-lmpg auth   # log in again
-lmpg flee   # continue from where it left off
+lmpg auth          # log in again
+lmpg flee          # continue timeline downloads from where it left off
+lmpg flee-albums   # continue album downloads from where it left off
 ```
 
 ---
@@ -284,30 +275,29 @@ If `lmpg enumerate` reports more items than `lmpg status` shows as the database 
 
 ## Commands
 
-| Command                               | Short | Description                                              |
-| ------------------------------------- | ----- | -------------------------------------------------------- |
-| `lmpg auth`                           |       | Log in to Google Photos (saves browser session)          |
-| `lmpg config`                         |       | Set output directory                                     |
-| `lmpg enumerate`                      |       | Scan library and populate database                       |
-| `lmpg enumerate --limit <n>`          | `-l`  | Stop after n items (testing)                             |
-| `lmpg enumerate-albums`               |       | Scan albums and save membership to database              |
-| `lmpg flee`                           |       | Download all pending photos                              |
-| `lmpg flee --failed-only`             | `-f`  | Only retry previously failed photos                      |
-| `lmpg flee --year <year>`             | `-y`  | Filter by year                                           |
-| `lmpg flee --from <date> --to <date>` |       | Filter by date range (YYYY, YYYY-MM, or YYYY-MM-DD)      |
-| `lmpg flee --limit <n>`               | `-l`  | Cap number of downloads                                  |
-| `lmpg flee --concurrency <n>`         | `-c`  | Parallel downloads (default: 3)                          |
-| `lmpg flee --inspect`                 |       | Headed browser with DevTools                             |
-| `lmpg status`                         |       | Show download progress                                   |
-| `lmpg verify`                         |       | Check unverified downloaded files and report issues      |
-| `lmpg verify --fix`                   |       | Also reset broken records to pending for re-download     |
-| `lmpg organize`                       |       | Create `Albums/` symlink tree from downloaded photos     |
-| `lmpg dedup-albums`                   |       | Dry-run: find album files byte-identical to timeline     |
-| `lmpg dedup-albums --fix`             |       | Delete album duplicates and redirect DB records          |
-| `lmpg reset-albums`                   |       | Dry-run: find album-only files with no timeline copy     |
-| `lmpg reset-albums --fix`             |       | Delete album-only files and remove their DB records      |
-| `lmpg -p <name> <command>`            | `-p`  | Use a named profile (separate auth, DB, and config)      |
-| `lmpg -v`                             |       | Print version                                            |
+| Command                                    | Short | Description                                              |
+| ------------------------------------------ | ----- | -------------------------------------------------------- |
+| `lmpg auth`                                |       | Log in to Google Photos (saves browser session)          |
+| `lmpg config`                              |       | Set output directory                                     |
+| `lmpg enumerate`                           |       | Scan library and populate database                       |
+| `lmpg enumerate-albums`                    |       | Scan albums and save membership to database              |
+| `lmpg flee`                                |       | Download all pending timeline photos                     |
+| `lmpg flee --failed-only`                  | `-f`  | Only retry previously failed photos                      |
+| `lmpg flee --limit <n>`                    | `-l`  | Cap number of downloads                                  |
+| `lmpg flee --concurrency <n>`              | `-c`  | Parallel downloads (default: 3)                          |
+| `lmpg flee --inspect`                      |       | Headed browser with DevTools                             |
+| `lmpg flee-albums`                         |       | Download album photos into `albums/`; symlink timeline   |
+| `lmpg flee-albums --failed-only`           | `-f`  | Only retry previously failed album photos                |
+| `lmpg flee-albums --limit <n>`             | `-l`  | Cap number of downloads                                  |
+| `lmpg flee-albums --concurrency <n>`       | `-c`  | Parallel downloads per album (default: 3)                |
+| `lmpg flee-albums --inspect`               |       | Headed browser with DevTools                             |
+| `lmpg status`                              |       | Show download progress                                   |
+| `lmpg verify`                              |       | Check unverified photos, reset broken records to pending |
+| `lmpg verify --dry-run`                    |       | Report issues only, without resetting records            |
+| `lmpg scrub`                               |       | Delete files on disk with no matching database record    |
+| `lmpg scrub --dry-run`                     |       | Preview what scrub would delete                          |
+| `lmpg -p <name> <command>`                 | `-p`  | Use a named profile (separate auth, DB, and config)      |
+| `lmpg -v`                                  |       | Print version                                            |
 
 ---
 

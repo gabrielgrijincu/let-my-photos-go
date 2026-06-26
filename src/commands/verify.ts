@@ -76,10 +76,10 @@ async function checkMagicBytes(filePath: string): Promise<boolean> {
 }
 
 export const verifyCommand = new Command('verify')
-  .description('Check unverified downloaded photos exist on disk and are non-empty')
-  .option('--fix', 'Reset records with issues to pending for re-download')
+  .description('Check unverified downloaded photos and reset any broken records to pending for re-download')
+  .option('--dry-run', 'Report issues without resetting broken records to pending')
   .option('--reset', 'Clear all verified_at timestamps so every downloaded photo is re-checked')
-  .action(async (opts: { fix?: boolean; reset?: boolean }, cmd: Command) => {
+  .action(async (opts: { dryRun?: boolean; reset?: boolean }, cmd: Command) => {
     const profile: string | undefined = cmd.parent?.opts()?.profile;
     const lmpg = (subcmd: string) => (profile ? `lmpg -p ${profile} ${subcmd}` : `lmpg ${subcmd}`);
     clack.intro('🕊️  Let My Photos Go — Verify');
@@ -268,15 +268,15 @@ export const verifyCommand = new Command('verify')
 
     clack.log.error(`${issues.length.toLocaleString()} issue(s) found out of ${checked.toLocaleString()} checked.`);
 
-    if (opts.fix) {
+    if (!opts.dryRun) {
       for (const { record } of issues) {
         resetToPending(record.media_item_id);
       }
       clack.log.success(
-        `Reset ${issues.length.toLocaleString()} record(s) to pending. Run \`${lmpg('flee')}\` to re-download.`,
+        `Reset ${issues.length.toLocaleString()} record(s) to pending. Run \`${lmpg('flee')}\` or \`${lmpg('flee-albums')}\` to re-download.`,
       );
     } else {
-      clack.log.info(`Run \`${lmpg('verify --fix')}\` to reset these records for re-download.`);
+      clack.log.info(`Run \`${lmpg('verify')}\` (without --dry-run) to reset these records for re-download.`);
     }
     } catch (err) {
       spinner.stop('Error.');

@@ -22,8 +22,6 @@ export interface PhotoRecord {
 
 export interface PhotoFilter {
   failedOnly?: boolean;
-  from?: Date;
-  to?: Date;
   limit?: number;
   source?: PhotoSource;
 }
@@ -168,14 +166,6 @@ export function getPendingPhotos(filter: PhotoFilter = {}): PhotoRecord[] {
   const conditions: string[] = [filter.failedOnly ? `status = 'failed'` : `status != 'downloaded'`];
   const params: unknown[] = [];
 
-  if (filter.from) {
-    conditions.push('creation_time >= ?');
-    params.push(filter.from.toISOString());
-  }
-  if (filter.to) {
-    conditions.push('creation_time < ?');
-    params.push(filter.to.toISOString());
-  }
   if (filter.source) {
     conditions.push('source = ?');
     params.push(filter.source);

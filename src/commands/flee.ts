@@ -55,15 +55,6 @@ function resolveDestPath(
   return candidate;
 }
 
-function parseDateArg(value: string, endOfDay = false): Date {
-  const parts = value.split('-').map(Number);
-  const [y, m = endOfDay ? 12 : 1, d = endOfDay ? 31 : 1] = parts;
-  const date = new Date(Date.UTC(y, m - 1, d, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0));
-  if (isNaN(date.getTime())) throw new Error(`Invalid date: "${value}"`);
-  return date;
-}
-
-
 async function probeNetwork(): Promise<boolean> {
   try {
     const ctrl = new AbortController();
@@ -81,9 +72,6 @@ async function probeNetwork(): Promise<boolean> {
 export const fleeCommand = new Command('flee')
   .description('Download all pending photos from the local database')
   .option('-f, --failed-only', 'Only retry photos that previously failed')
-  .option('-y, --year <year>', 'Only download photos from a specific year (e.g. 2023)')
-  .option('--from <date>', 'Only download photos on or after this date (YYYY, YYYY-MM, or YYYY-MM-DD)')
-  .option('--to <date>', 'Only download photos on or before this date (YYYY, YYYY-MM, or YYYY-MM-DD)')
   .option('-l, --limit <n>', 'Maximum number of photos to download', parseInt)
   .option('-c, --concurrency <n>', 'Number of parallel downloads', parseInt)
   .option('--inspect', 'Open a visible browser with DevTools for each download (for debugging)')
@@ -91,9 +79,6 @@ export const fleeCommand = new Command('flee')
     async (
       options: {
         failedOnly?: boolean;
-        year?: string;
-        from?: string;
-        to?: string;
         limit?: number;
         concurrency?: number;
         inspect?: boolean;
@@ -111,20 +96,6 @@ export const fleeCommand = new Command('flee')
       }
       if (!fs.existsSync(getAuthPath())) {
         clack.log.error(`No browser session found. Run \`${lmpg('auth')}\` first.`);
-        process.exit(1);
-      }
-
-      let fromDate: Date | undefined;
-      let toDate: Date | undefined;
-      try {
-        if (options.year) {
-          fromDate = parseDateArg(options.year);
-          toDate = new Date(Date.UTC(Number(options.year) + 1, 0, 1));
-        }
-        if (options.from) fromDate = parseDateArg(options.from);
-        if (options.to) toDate = parseDateArg(options.to, true);
-      } catch (err) {
-        clack.log.error(String(err));
         process.exit(1);
       }
 
@@ -146,8 +117,6 @@ export const fleeCommand = new Command('flee')
 
       const filter: PhotoFilter = {
         failedOnly: options.failedOnly,
-        from: fromDate,
-        to: toDate,
         limit: options.limit,
         source: 'timeline',
       };
@@ -161,16 +130,8 @@ export const fleeCommand = new Command('flee')
         return;
       }
 
-      const filterDesc = [
-        fromDate && `from ${fromDate.toISOString().slice(0, 10)}`,
-        toDate && `to ${toDate.toISOString().slice(0, 10)}`,
-        options.limit && `limit=${options.limit}`,
-      ]
-        .filter(Boolean)
-        .join(', ');
-
       clack.log.info(
-        `Downloading ${pending.length} photos${filterDesc ? ` (${filterDesc})` : ''} to ${outputDir} (concurrency: ${concurrency})…`,
+        `Downloading ${pending.length} photos${options.limit ? ` (limit=${options.limit})` : ''} to ${outputDir} (concurrency: ${concurrency})…`,
       );
 
       let downloaded = 0;
