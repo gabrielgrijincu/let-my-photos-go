@@ -25,6 +25,7 @@ export interface PhotoFilter {
   from?: Date;
   to?: Date;
   limit?: number;
+  source?: PhotoSource;
 }
 
 let _db: Database.Database | null = null;
@@ -175,6 +176,10 @@ export function getPendingPhotos(filter: PhotoFilter = {}): PhotoRecord[] {
     conditions.push('creation_time < ?');
     params.push(filter.to.toISOString());
   }
+  if (filter.source) {
+    conditions.push('source = ?');
+    params.push(filter.source);
+  }
 
   let sql = `SELECT * FROM photos WHERE ${conditions.join(' AND ')} ORDER BY creation_time ASC`;
   if (filter.limit) {
@@ -231,45 +236,34 @@ export function upsertAlbumPhoto(
 }
 
 
-export interface OrganizePhoto {
-  mediaItemId: string;
-  destPath: string;
-  filename: string;
-}
-
-export interface OrganizeAlbum {
+export interface AlbumPhotoRow {
   albumId: string;
-  title: string;
-  totalInAlbum: number;
-  photos: OrganizePhoto[];
+  albumTitle: string;
+  mediaItemId: string;
+  status: PhotoStatus;
+  dest_path: string | null;
+  filename: string | null;
+  google_url: string | null;
+  creation_time: string | null;
 }
 
-export function getOrganizeData(): OrganizeAlbum[] {
-  const db = getDb();
-  const rows = db.prepare(`
-    SELECT a.album_id, a.title,
-           COUNT(*) OVER (PARTITION BY a.album_id) AS total_in_album,
-           p.media_item_id, p.dest_path, p.filename
+export function getAlbumPhotosForFlee(): AlbumPhotoRow[] {
+  return getDb().prepare(`
+    SELECT a.album_id      AS albumId,
+           a.title         AS albumTitle,
+           p.media_item_id AS mediaItemId,
+           p.status,
+           p.dest_path,
+           p.filename,
+           p.google_url,
+           p.creation_time
     FROM albums a
     JOIN album_photos ap ON ap.album_id = a.album_id
-    LEFT JOIN photos p ON p.media_item_id = ap.media_item_id
+    JOIN photos p ON p.media_item_id = ap.media_item_id
     ORDER BY a.title, p.creation_time, p.media_item_id
-  `).all() as {
-    album_id: string; title: string; total_in_album: number;
-    media_item_id: string | null; dest_path: string | null; filename: string | null;
-  }[];
-
-  const map = new Map<string, OrganizeAlbum>();
-  for (const row of rows) {
-    if (!map.has(row.album_id)) {
-      map.set(row.album_id, { albumId: row.album_id, title: row.title, totalInAlbum: row.total_in_album, photos: [] });
-    }
-    if (row.dest_path && row.filename && row.media_item_id) {
-      map.get(row.album_id)!.photos.push({ mediaItemId: row.media_item_id, destPath: row.dest_path, filename: row.filename });
-    }
-  }
-  return [...map.values()];
+  `).all() as AlbumPhotoRow[];
 }
+
 
 export function getStats(): { total: number; downloaded: number; failed: number; pending: number } {
   const db = getDb();

@@ -48,8 +48,8 @@ export const scrubCommand = new Command('scrub')
     const known = new Set<string>();
     let companionCount = 0;
     for (const row of rows) {
-      known.add(row.dest_path);
-      if (row.companion_path) { known.add(row.companion_path); companionCount++; }
+      known.add(row.dest_path.normalize('NFC'));
+      if (row.companion_path) { known.add(row.companion_path.normalize('NFC')); companionCount++; }
     }
 
     spinner.message('Scanning files on disk…');
@@ -57,7 +57,6 @@ export const scrubCommand = new Command('scrub')
     const allFiles: string[] = [];
     try {
       for (const entry of await fs.readdir(outputDir, { withFileTypes: true })) {
-        if (entry.name === 'Albums') continue;
         const full = path.join(outputDir, entry.name);
         if (entry.isDirectory()) {
           await walk(full, allFiles);
@@ -75,7 +74,7 @@ export const scrubCommand = new Command('scrub')
       `Scanned ${allFiles.length.toLocaleString()} files on disk — DB knows ${rows.length.toLocaleString()} photos + ${companionCount.toLocaleString()} Live Photo companions.`,
     );
 
-    const orphans = allFiles.filter(f => !known.has(path.relative(outputDir, f)));
+    const orphans = allFiles.filter(f => !known.has(path.relative(outputDir, f).normalize('NFC')));
 
     if (orphans.length === 0) {
       clack.log.success('No orphaned files found — output directory is clean.');

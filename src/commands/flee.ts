@@ -8,7 +8,7 @@ import { launchHeadlessBrowser, saveSession } from '../browser.js';
 import { getAuthPath } from '../paths.js';
 import { markDownloaded, markFailed, getPendingPhotos, hasAnyPhotos, getDestPathOwner, getStats } from '../db.js';
 import { readConfig } from '../config.js';
-import { runWithConcurrency } from '../util.js';
+import { runWithConcurrency, buildFilename } from '../util.js';
 import type { PhotoRecord, PhotoFilter } from '../db.js';
 
 // --- helpers ---
@@ -21,25 +21,37 @@ function absPath(stored: string, base: string): string {
   return path.isAbsolute(stored) ? stored : path.resolve(base, stored);
 }
 
-function resolveDestPath(outputDir: string, photo: PhotoRecord, filename: string): string {
+function resolveDestPath(
+  outputDir: string,
+  photo: PhotoRecord,
+  filename: string,
+  reserved: Set<string>,
+): string {
   const date = photo.creation_time ? new Date(photo.creation_time) : null;
-  const year = date && !isNaN(date.getTime()) ? String(date.getUTCFullYear()) : 'unknown';
-  const month = date && !isNaN(date.getTime()) ? String(date.getUTCMonth() + 1).padStart(2, '0') : 'unknown';
+  const valid = date && !isNaN(date.getTime());
+  const year = valid ? String(date!.getUTCFullYear()) : 'unknown';
+  const month = valid ? String(date!.getUTCMonth() + 1).padStart(2, '0') : 'unknown';
   const dir = path.join(outputDir, year, month);
   fs.mkdirSync(dir, { recursive: true });
 
-  const ext = path.extname(filename);
-  const base = path.basename(filename, ext);
-  let candidate = path.join(dir, filename);
+  const newFilename = buildFilename(date, filename);
+  const ext = path.extname(newFilename);
+  const base = path.basename(newFilename, ext);
+  let candidate = path.join(dir, newFilename);
+  let rel = relPath(candidate, outputDir);
   let counter = 1;
 
-  while (fs.existsSync(candidate)) {
-    const owner = getDestPathOwner(relPath(candidate, outputDir));
+  // Check both filesystem (already downloaded) and in-memory set (in-flight downloads).
+  // No await between check and add — atomic in JS's single-threaded event loop.
+  while (fs.existsSync(candidate) || reserved.has(rel)) {
+    const owner = getDestPathOwner(rel);
     if (owner === photo.media_item_id) break;
     candidate = path.join(dir, `${base}_${counter}${ext}`);
+    rel = relPath(candidate, outputDir);
     counter++;
   }
 
+  reserved.add(rel);
   return candidate;
 }
 
@@ -137,6 +149,7 @@ export const fleeCommand = new Command('flee')
         from: fromDate,
         to: toDate,
         limit: options.limit,
+        source: 'timeline',
       };
       const pending = getPendingPhotos(filter);
 
@@ -209,6 +222,8 @@ export const fleeCommand = new Command('flee')
         return false;
       }
 
+      const reserved = new Set<string>();
+
       const worker = async (photo: PhotoRecord) => {
         if (sessionExpired || shuttingDown) return;
 
@@ -250,7 +265,7 @@ export const fleeCommand = new Command('flee')
 
             const download = await downloadPromise;
             const filename = download.suggestedFilename() || `${photo.media_item_id}.jpg`;
-            const destPath = resolveDestPath(outputDir, photo, filename);
+            const destPath = resolveDestPath(outputDir, photo, filename, reserved);
             await download.saveAs(destPath);
             await download.delete();
 
@@ -267,11 +282,11 @@ export const fleeCommand = new Command('flee')
                 const stillEntry = zip.getEntries().find(e => /\.(heic|jpg|jpeg|png)$/i.test(e.entryName));
 
                 if (stillEntry) {
-                  const resolvedStillPath = resolveDestPath(outputDir, photo, stillEntry.entryName);
+                  const resolvedStillPath = resolveDestPath(outputDir, photo, stillEntry.entryName, reserved);
                   const resolvedBase = resolvedStillPath.replace(/\.[^.]+$/, '');
 
                   for (const entry of zip.getEntries()) {
-                    const ext = path.extname(entry.entryName);
+                    const ext = path.extname(entry.entryName).toLowerCase();
                     const outPath = resolvedBase + ext;
                     fs.writeFileSync(outPath, entry.getData());
                     extractedPaths.push(outPath);

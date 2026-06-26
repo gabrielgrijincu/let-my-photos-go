@@ -119,6 +119,7 @@ export const verifyCommand = new Command('verify')
 
     const spinner = clack.spinner();
     spinner.start(`Verifying ${total.toLocaleString()} unverified photos…`);
+    try {
 
     let stopping = false;
 
@@ -276,5 +277,11 @@ export const verifyCommand = new Command('verify')
       );
     } else {
       clack.log.info(`Run \`${lmpg('verify --fix')}\` to reset these records for re-download.`);
+    }
+    } catch (err) {
+      spinner.stop('Error.');
+      if (process.stdin.isTTY) { process.stdin.setRawMode(false); process.stdin.pause(); }
+      clack.log.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
     }
   });
